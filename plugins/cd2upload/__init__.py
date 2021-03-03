@@ -1,23 +1,24 @@
 import os
 import shutil
-import subprocess
 import threading
+import time
 from datetime import datetime, timedelta
 from typing import List, Tuple, Dict, Any
 
 import pytz
-from aiofiles.os import readlink
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.core.config import settings
+from app.core.context import MediaInfo
 from app.core.event import eventmanager, Event
+from app.core.meta import MetaBase
 from app.db import get_db
-from app.db.subscribe_oper import SubscribeOper
 from app.db.models.transferhistory import TransferHistory
+from app.db.subscribe_oper import SubscribeOper
 from app.log import logger
 from app.plugins import _PluginBase
-from app.schemas import TransferInfo, MediaInfo
-from app.schemas.types import EventType, SystemConfigKey
+from app.schemas import TransferInfo, Notification
+from app.schemas.types import EventType, NotificationType
 
 lock = threading.Lock()
 
@@ -30,7 +31,7 @@ class Cd2Upload(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.7"
+    plugin_version = "0.0.8"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -38,7 +39,7 @@ class Cd2Upload(_PluginBase):
     # 插件配置项ID前缀
     plugin_config_prefix = "cd2upload_"
     # 加载顺序
-    plugin_order = 19
+    plugin_order = 1
     # 可使用的用户级别
     auth_level = 3
 
@@ -131,6 +132,8 @@ class Cd2Upload(_PluginBase):
 
         # 判断段转移任务开始时间 新剧晚点上传 老剧立马上传
         media_info: MediaInfo = event.event_data.get('mediainfo', {})
+        meta: MetaBase = event.event_data.get("meta")
+
         if media_info:
             is_exist = self._subscribe_oper.exists(tmdbid=media_info.tmdb_id, doubanid=media_info.douban_id,
                                                    season=media_info.season)
@@ -140,6 +143,7 @@ class Cd2Upload(_PluginBase):
                 try:
                     self._scheduler.remove_all_jobs()
                     self._scheduler.add_job(func=self.task, trigger='date',
+                                            kwargs={"media_info": media_info, "meta": meta},
                                             run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(
                                                 minutes=self._cron),
                                             name="cd2转移")
@@ -154,7 +158,8 @@ class Cd2Upload(_PluginBase):
                                         name="cd2转移")
             self._scheduler.start()
 
-    def task(self):
+    def task(self, media_info: MediaInfo = None, meta: MetaBase = None):
+        start_time = time.time()
         with (lock):
             waiting_process_list = self.get_data('waiting_process_list') or []
             processed_list = self.get_data('processed_list') or []
@@ -179,6 +184,12 @@ class Cd2Upload(_PluginBase):
             logger.info("上传完毕，STRM文件将在链接文件失效后生成")
             self.save_data('waiting_process_list', process_list)
             self.save_data('processed_list', processed_list)
+            end_time = time.time()
+            if media_info:
+                self.chain.post_message(Notification(
+                    mtype=NotificationType.Plugin,
+                    title=media_info.title_year, text=f"{meta.episodes} 上传成功 用时{end_time - start_time}秒",
+                    image=media_info.get_message_image()))
 
     def _upload_file(self, softlink_source: str = None, cd2_dest: str = None) -> bool:
         logger.info('')
