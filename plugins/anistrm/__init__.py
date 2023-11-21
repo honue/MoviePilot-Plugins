@@ -270,13 +270,17 @@ class ANiStrm(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '建议配合目录监控使用，strm文件创建在/downloads/strm'
+                                            'text': '建议配合目录监控使用，strm文件创建在/downloads/cartoonstrm'
                                                     '通过目录监控转移到link媒体库文件夹 如/downloads/link/cartoonstrm,mp会完成刮削 '
-                                                    '不开启一次性创建全部，则每次运行会创建ani最新季度的top15个文件。'
-                                                    'emby需要设置代理，源来自 https://aniopen.an-i.workers.dev/'
-                                                    '创建的Strm在串流模式下一定可以播放，直接播放：'
-                                                    '1.在Windows小秘能播放'
-                                                    '2.网页端和fileball播放测试失败。（log是tcp connect timeout）'
+
+                                        }
+                                    },
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': 'emby需要设置代理，docker的环境变量必须要有http_proxy代理变量，大小写敏感，具体见readme.'
                                         }
                                     }
                                 ]
