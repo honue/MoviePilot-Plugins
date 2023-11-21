@@ -1,0 +1,11 @@
+{
+    "ANiStrm": {
+        "name": "ANiStrm",
+        "description": "生成strm文件，mp刮削，emby直链播放",
+        "version": "1.0",
+        "icon": "https://cdn.jsdelivr.net/gh/RyanL-29/aniopen/aniopen.png",
+        "color": "#4179F4",
+        "author": "honue",
+        "level": 2
+    }
+}
