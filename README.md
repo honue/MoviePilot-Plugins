@@ -27,25 +27,22 @@ MoviePilot非官方插件库, ANi-Strm
 	<img src="./img/pic1.png">
 </div>
 
-> 源来自 https://aniopen.an-i.workers.dev emby需要设置代理
+> 非常感谢 https://aniopen.an-i.workers.dev TG:[Channel_ANi](https://t.me/channel_ani)
 
-## 存在的问题
-**已定位问题 疑似ffprobe命令读取网络视频的媒体信息时，给容器设定的代理，命令执行不生效**
+## 注意
+ **已解决**  ~~**已定位问题 疑似ffprobe命令读取网络视频的媒体信息时，给容器设定的代理，命令执行不生效**~~
 > /bin/ffprobe -i "https://resources.ani.rip/2023-10/[ANi] 葬送的芙莉蓮 - 02 [1080P][Baha][WEB-DL][AAC AVC][CHT].mp4?d=true" -threads 0 -v info -print_format json -show_streams -show_chapters -show_format -show_data
 
-串流播放成功：
-创建的Strm在串流模式下可以播放
+emby需要设置代理 **环境变量必须多设置一条，键为小写的http_proxy的代理**
 
-直接播放（未知情况）：
+[ffprobe源码](https://github.com/FFmpeg/FFmpeg/blob/master/libavformat/http.c#L218C48-L218C48) 使用getenv_utf8("http_proxy") 对大小写敏感。
 
-1.在Windows用[小秘](https://t.me/EmbyNoisyX)能正常播放
-
-2.网页端和fileball播放测试失败。~~（Emby Server log是tcp connect timeout,试过将视频上传到国内的云，测试能够秒开strm文件也能读取到媒体信息，不知道是不是跟cf workers有关）~~ 
-<div align="center">
-	<img src="./img/test.png">
-</div>
-
-> 目前先这样，接下来看看怎么解决播放的问题。有遇到过的请务必告诉解决方法
+docker-compose env
+```
+- 'http_proxy=http://127.0.0.1:7890'
+- 'HTTP_PROXY=http://127.0.0.1:7890'
+- 'HTTPS_PROXY=http://127.0.0.1:7890'
+```
 
 ## 2023-10秋 刮削效果
 <div align="center">
@@ -54,5 +51,5 @@ MoviePilot非官方插件库, ANi-Strm
 
 ## Todo:
 
-- [ ] 网页、fileball 无法播放的问题（应该是链接timeout的问题），看看能不能解决，或者有无更好的源代替。
+- [x] ~~网页、fileball 无法播放的问题，看看能不能解决，或者有无更好的源代替~~。
 - [ ] 排查是否存在bug，优化使用
