@@ -30,6 +30,9 @@ MoviePilot非官方插件库, ANi-Strm
 > 源来自 https://aniopen.an-i.workers.dev emby需要设置代理
 
 ## 存在的问题
+**已定位问题 疑似ffprobe命令读取网络视频的媒体信息时，给容器设定的代理，命令执行不生效**
+> /bin/ffprobe -i "https://resources.ani.rip/2023-10/[ANi] 葬送的芙莉蓮 - 02 [1080P][Baha][WEB-DL][AAC AVC][CHT].mp4?d=true" -threads 0 -v info -print_format json -show_streams -show_chapters -show_format -show_data
+
 串流播放成功：
 创建的Strm在串流模式下可以播放
 
@@ -37,7 +40,7 @@ MoviePilot非官方插件库, ANi-Strm
 
 1.在Windows用[小秘](https://t.me/EmbyNoisyX)能正常播放
 
-2.网页端和fileball播放测试失败（偶尔可以正常播放）。（Emby Server log是tcp connect timeout,试过将视频上传到国内的云，测试能够秒开strm文件也能读取到媒体信息，不知道是不是跟cf workers有关）
+2.网页端和fileball播放测试失败。~~（Emby Server log是tcp connect timeout,试过将视频上传到国内的云，测试能够秒开strm文件也能读取到媒体信息，不知道是不是跟cf workers有关）~~ 
 <div align="center">
 	<img src="./img/test.png">
 </div>
