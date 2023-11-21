@@ -17,7 +17,7 @@ class ANiStrm(_PluginBase):
     # 插件名称
     plugin_name = "ANiStrm"
     # 插件描述
-    plugin_desc = "生成strm文件，mp目录监控转移刮削，emby播放直链资源"
+    plugin_desc = "当季所有番剧，生成strm文件，mp刮削入库，emby直接播放，免去下载"
     # 插件图标
     plugin_icon = "https://cdn.jsdelivr.net/gh/honue/MoviePilot-Plugins@main/icon/anistrm.png"
     # 主题色

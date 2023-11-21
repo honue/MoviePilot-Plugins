@@ -1,8 +1,8 @@
 {
     "ANiStrm": {
         "name": "ANi Strm",
-        "description": "生成strm文件，mp刮削，emby直接播放，免去下载",
-        "version": "1.0",
+        "description": "当季所有番剧，生成strm文件，mp刮削入库，emby直接播放，免去下载",
+        "version": "1.1",
         "icon": "https://cdn.jsdelivr.net/gh/honue/MoviePilot-Plugins@main/icon/anistrm.png",
         "color": "#051b45",
         "author": "honue",
