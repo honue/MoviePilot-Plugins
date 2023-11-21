@@ -3,7 +3,7 @@
 MoviePilot非官方插件库, ANi-Strm
 
 - [ANi-Strm插件](#MoviePilot-x-ANi-Strm)
-  - [存在的问题](#存在的问题)
+  - [注意事项](#注意事项)
   - [2023-10秋 刮削效果](#2023-10秋-刮削效果)
   - [Todo](#Todo)
 
@@ -29,7 +29,7 @@ MoviePilot非官方插件库, ANi-Strm
 
 > 非常感谢 https://aniopen.an-i.workers.dev TG:[Channel_ANi](https://t.me/channel_ani)
 
-## 注意
+## 注意事项
  **已解决**  ~~**已定位问题 疑似ffprobe命令读取网络视频的媒体信息时，给容器设定的代理，命令执行不生效**~~
 > /bin/ffprobe -i "https://resources.ani.rip/2023-10/[ANi] 葬送的芙莉蓮 - 02 [1080P][Baha][WEB-DL][AAC AVC][CHT].mp4?d=true" -threads 0 -v info -print_format json -show_streams -show_chapters -show_format -show_data
 
