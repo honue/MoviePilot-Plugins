@@ -11,7 +11,7 @@ from typing import Any, List, Dict, Tuple, Optional
 from app.log import logger
 
 
-class AniStrm(_PluginBase):
+class ANiStrm(_PluginBase):
     # 插件名称
     plugin_name = "ANiStrm"
     # 插件描述
