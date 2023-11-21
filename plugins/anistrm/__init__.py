@@ -122,11 +122,9 @@ class ANiStrm(_PluginBase):
     def __touch_strm_file(self, file_name) -> bool:
         src_url = f'https://resources.ani.rip/{self._date}/{file_name}?d=true'
         file_path = f'{self._storageplace}/{file_name}.strm'
-
         if os.path.exists(file_path):
             logger.debug(f'{file_name}.strm 文件已存在')
-            return True
-
+            return False
         try:
             with open(file_path, 'w') as file:
                 file.write(src_url)
@@ -140,12 +138,12 @@ class ANiStrm(_PluginBase):
         name_list = self.__get_name_list()
         if not fulladd:
             name_list = name_list[:15]
-        logger.info(f'本次需要生成 {len(name_list)} 个strm文件')
+        logger.info(f'获取了 {len(name_list)} 个文件名称')
         cnt = 0
         for file_name in name_list:
             if self.__touch_strm_file(file_name=file_name):
                 cnt += 1
-        logger.info(f'成功创建了 {cnt} 个strm文件')
+        logger.info(f'新创建了 {cnt} 个strm文件')
 
     def get_state(self) -> bool:
         return self._enabled
