@@ -17,7 +17,7 @@ class ANiStrm(_PluginBase):
     # 插件描述
     plugin_desc = "生成strm文件，mp目录监控转移刮削，emby播放直链资源"
     # 插件图标
-    plugin_icon = "https://cdn.jsdelivr.net/gh/RyanL-29/aniopen/aniopen.png"
+    plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icon/anistrm.png"
     # 主题色
     plugin_color = "#e6e6e6"
     # 插件版本
@@ -230,7 +230,7 @@ class ANiStrm(_PluginBase):
                                         'props': {
                                             'model': 'storageplace',
                                             'label': 'Strm存储地址',
-                                            'placeholder': '/downloads/cartoonstrm'
+                                            'placeholder': '/downloads/strm'
                                         }
                                     }
                                 ]
@@ -251,7 +251,7 @@ class ANiStrm(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '建议配合目录监控使用，strm文件创建在/downloads/cartoonstrm'
+                                            'text': '建议配合目录监控使用，strm文件创建在/downloads/strm'
                                                     '通过目录监控转移到link媒体库文件夹 如/downloads/link/cartoonstrm,mp会完成刮削 '
                                                     '不开启一次性创建全部，则每次运行会创建ani最新季度的top15个文件。'
                                                     'emby需要设置代理，源来自 https://aniopen.an-i.workers.dev/'
@@ -270,8 +270,8 @@ class ANiStrm(_PluginBase):
             "enabled": False,
             "onlyonce": False,
             "fulladd": False,
-            "storageplace": '/downloads/cartoonstrm',
-            "cron": "*/20 22-2 * * *",
+            "storageplace": '/downloads/strm',
+            "cron": "*/20 22,23,0,1 * * *",
         }
 
     def __update_config(self):
