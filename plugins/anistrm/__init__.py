@@ -69,7 +69,7 @@ class ANiStrm(_PluginBase):
 
             if self._onlyonce:
                 logger.info(f"ANiStrm文件刷新服务启动，立即运行一次")
-                self._scheduler.add_job(func=self.__task(fulladd=self._fulladd), trigger='date',
+                self._scheduler.add_job(func=self.__task, trigger='date',
                                         run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
                                         name="ANiStrm文件刷新")
                 # 关闭一次性开关 全量转移
@@ -96,6 +96,7 @@ class ANiStrm(_PluginBase):
         try:
             rep = RequestUtils(ua=settings.USER_AGENT if settings.USER_AGENT else None,
                                proxies=settings.PROXY if settings.PROXY else None).post(url=url)
+            logger.debug(rep.text)
             files_json = rep.json()['files']
             name_list = []
             for file in files_json:
@@ -103,7 +104,7 @@ class ANiStrm(_PluginBase):
             return name_list
         except Exception as e:
             logger.error(str(e))
-            pass
+            return []
         # self.save_data("history", pulgin_history)
 
     def __touch_strm_file(self, file_name):
@@ -112,14 +113,17 @@ class ANiStrm(_PluginBase):
         try:
             with open(file_path, 'w') as file:
                 file.write(src_url)
+                logger.info(f'创建 {file_name}.strm 文件成功')
         except Exception as e:
             logger.error('创建strm源文件失败：' + str(e))
             pass
 
-    def __task(self, fulladd: bool = False):
+    def __task(self):
         name_list = self.__get_name_list()
-        if not fulladd:
+        if not self._fulladd:
             name_list = name_list[:15]
+        else:
+            self._fulladd = False
         for file_name in name_list:
             self.__touch_strm_file(file_name=file_name)
 
@@ -187,7 +191,7 @@ class ANiStrm(_PluginBase):
                                         'component': 'VSwitch',
                                         'props': {
                                             'model': 'fulladd',
-                                            'label': '下次运行创建当前季度所有番剧strm',
+                                            'label': '下次创建当前季度所有番剧strm',
                                         }
                                     }
                                 ]
@@ -225,7 +229,7 @@ class ANiStrm(_PluginBase):
                                         'component': 'VTextField',
                                         'props': {
                                             'model': 'storageplace',
-                                            'label': 'strm存储地址',
+                                            'label': 'Strm存储地址',
                                             'placeholder': '/downloads/cartoonstrm'
                                         }
                                     }
@@ -247,7 +251,13 @@ class ANiStrm(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '建议配合目录监控使用，strm文件创建在/downloads/cartoonstrm 通过目录监控转移到link媒体库文件夹 如/downloads/link/cartoonstrm,mp会完成刮削，不开启一次性创建全部，则每次运行会创建ani最新季度的top15个文件。emby需要设置代理，源来自 https://aniopen.an-i.workers.dev/  创建的Strm在串流模式下一定可以播放，直接播放：1.在Windows小秘能播放 2.网页端和fileball播放测试失败。（log是tcp connect timeout）'
+                                            'text': '建议配合目录监控使用，strm文件创建在/downloads/cartoonstrm'
+                                                    '通过目录监控转移到link媒体库文件夹 如/downloads/link/cartoonstrm,mp会完成刮削 '
+                                                    '不开启一次性创建全部，则每次运行会创建ani最新季度的top15个文件。'
+                                                    'emby需要设置代理，源来自 https://aniopen.an-i.workers.dev/'
+                                                    '创建的Strm在串流模式下一定可以播放，直接播放：'
+                                                    '1.在Windows小秘能播放'
+                                                    '2.网页端和fileball播放测试失败。（log是tcp connect timeout）'
                                         }
                                     }
                                 ]
