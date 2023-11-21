@@ -18,7 +18,11 @@ MoviePilot非官方插件库, ANi-Strm
 
 不开启一次性创建全部，则每次运行会创建ani最新季度的top15个文件。
 
-源来自 https://aniopen.an-i.workers.dev emby需要设置代理
+<div align="center">
+	<img src="./img/pic1.png">
+</div>
+
+> 源来自 https://aniopen.an-i.workers.dev emby需要设置代理
 
 串流播放测试成功：
 创建的Strm在串流模式下可以播放

@@ -65,15 +65,15 @@ class ANiStrm(_PluginBase):
                 try:
                     self._scheduler.add_job(func=self.__task,
                                             trigger=CronTrigger.from_crontab(self._cron),
-                                            name="ANiStrm文件刷新")
+                                            name="ANiStrm文件创建")
                 except Exception as err:
                     logger.error(f"定时任务配置错误：{str(err)}")
 
             if self._onlyonce:
-                logger.info(f"ANiStrm文件刷新服务启动，立即运行一次")
+                logger.info(f"ANi Strm服务启动，立即运行一次")
                 self._scheduler.add_job(func=self.__task, args=[self._fulladd], trigger='date',
                                         run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-                                        name="ANiStrm文件刷新")
+                                        name="ANiStrm文件创建")
                 # 关闭一次性开关 全量转移
                 self._onlyonce = False
                 self._fulladd = False
