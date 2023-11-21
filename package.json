@@ -1,10 +1,10 @@
 {
     "ANiStrm": {
-        "name": "ANiStrm",
-        "description": "生成strm文件，mp刮削，emby直链播放",
+        "name": "ANi Strm",
+        "description": "生成strm文件，mp刮削，emby直接播放，免去下载",
         "version": "1.0",
-        "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icon/anistrm.png",
-        "color": "#4179F4",
+        "icon": "https://cdn.jsdelivr.net/gh/honue/MoviePilot-Plugins@main/icon/anistrm.png",
+        "color": "#051b45",
         "author": "honue",
         "level": 2
     }

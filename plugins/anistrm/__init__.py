@@ -1,3 +1,5 @@
+import os
+import time
 from datetime import datetime, timedelta
 
 import pytz
@@ -17,7 +19,7 @@ class ANiStrm(_PluginBase):
     # 插件描述
     plugin_desc = "生成strm文件，mp目录监控转移刮削，emby播放直链资源"
     # 插件图标
-    plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icon/anistrm.png"
+    plugin_icon = "https://cdn.jsdelivr.net/gh/honue/MoviePilot-Plugins@main/icon/anistrm.png"
     # 主题色
     plugin_color = "#e6e6e6"
     # 插件版本
@@ -69,7 +71,7 @@ class ANiStrm(_PluginBase):
 
             if self._onlyonce:
                 logger.info(f"ANiStrm文件刷新服务启动，立即运行一次")
-                self._scheduler.add_job(func=self.__task, trigger='date',
+                self._scheduler.add_job(func=self.__task, args=[self._fulladd], trigger='date',
                                         run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
                                         name="ANiStrm文件刷新")
                 # 关闭一次性开关 全量转移
@@ -93,39 +95,56 @@ class ANiStrm(_PluginBase):
 
     def __get_name_list(self) -> List:
         url = f'https://aniopen.an-i.workers.dev/{self.__get_ani_season()}/'
-        try:
-            rep = RequestUtils(ua=settings.USER_AGENT if settings.USER_AGENT else None,
-                               proxies=settings.PROXY if settings.PROXY else None).post(url=url)
-            logger.debug(rep.text)
-            files_json = rep.json()['files']
-            name_list = []
-            for file in files_json:
-                name_list.append(file['name'])
-            return name_list
-        except Exception as e:
-            logger.error(str(e))
-            return []
+
+        retries = 0
+        MAX_RETRIES = 3
+        WAIT_TIME_SECONDS = 5
+
+        while retries < MAX_RETRIES:
+            try:
+                rep = RequestUtils(ua=settings.USER_AGENT if settings.USER_AGENT else None,
+                                   proxies=settings.PROXY if settings.PROXY else None).post(url=url)
+                logger.debug(rep.text)
+                files_json = rep.json()['files']
+                name_list = [file['name'] for file in files_json]
+                return name_list
+            except Exception as e:
+                logger.error(f'本次获取name_list失败')
+                retries += 1
+                if retries < MAX_RETRIES:
+                    logger.info(f'将在 {WAIT_TIME_SECONDS} 秒后重试...')
+                    time.sleep(WAIT_TIME_SECONDS)
+        logger.warning(f'超过重试次数...')
+        return []
         # self.save_data("history", pulgin_history)
 
-    def __touch_strm_file(self, file_name):
+    def __touch_strm_file(self, file_name) -> bool:
         src_url = f'https://resources.ani.rip/{self._date}/{file_name}?d=true'
         file_path = f'{self._storageplace}/{file_name}.strm'
+
+        if os.path.exists(file_path):
+            logger.debug(f'{file_name}.strm 文件已存在')
+            return True
+
         try:
             with open(file_path, 'w') as file:
                 file.write(src_url)
-                logger.info(f'创建 {file_name}.strm 文件成功')
+                logger.debug(f'创建 {file_name}.strm 文件成功')
+                return True
         except Exception as e:
             logger.error('创建strm源文件失败：' + str(e))
-            pass
+            return False
 
-    def __task(self):
+    def __task(self, fulladd: bool = False):
         name_list = self.__get_name_list()
-        if not self._fulladd:
+        if not fulladd:
             name_list = name_list[:15]
-        else:
-            self._fulladd = False
+        logger.info(f'本次需要生成 {len(name_list)} 个strm文件')
+        cnt = 0
         for file_name in name_list:
-            self.__touch_strm_file(file_name=file_name)
+            if self.__touch_strm_file(file_name=file_name):
+                cnt += 1
+        logger.info(f'成功创建了 {cnt} 个strm文件')
 
     def get_state(self) -> bool:
         return self._enabled
