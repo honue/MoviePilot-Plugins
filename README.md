@@ -9,7 +9,7 @@ MoviePilot非官方插件库, ANi-Strm
 通过目录监控插件转移到link媒体库文件夹 如/downloads/link/strm，mp会完成刮削 这样也避免了污染正常视频文件的媒体库
 
 ```
-/downloads/strm:/downloads/link/strm#move
+/downloads/strm:/downloads/link/strm#copy
 ```
 
 <div align="center">
