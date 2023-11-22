@@ -17,13 +17,13 @@ class ANiStrm(_PluginBase):
     # 插件名称
     plugin_name = "ANiStrm"
     # 插件描述
-    plugin_desc = "当季所有番剧，生成strm文件，mp刮削入库，emby直接播放，免去下载"
+    plugin_desc = "自动获取当季所有番剧，生成strm文件，mp刮削入库，emby直接播放，免去下载，轻松拥有一个番剧媒体库"
     # 插件图标
     plugin_icon = "https://cdn.jsdelivr.net/gh/honue/MoviePilot-Plugins@main/icon/anistrm.png"
     # 主题色
     plugin_color = "#e6e6e6"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -138,7 +138,7 @@ class ANiStrm(_PluginBase):
         name_list = self.__get_name_list()
         if not fulladd:
             name_list = name_list[:15]
-        logger.info(f'获取了 {len(name_list)} 个文件名称')
+        logger.info(f'本次处理 {len(name_list)} 个文件')
         cnt = 0
         for file_name in name_list:
             if self.__touch_strm_file(file_name=file_name):
@@ -269,9 +269,10 @@ class ANiStrm(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '建议配合目录监控使用，strm文件创建在/downloads/cartoonstrm'
-                                                    '通过目录监控转移到link媒体库文件夹 如/downloads/link/cartoonstrm,mp会完成刮削 '
-
+                                            'text': '自动从open ANi抓取下载直链生成strm文件，免去人工订阅下载' + '\n' +
+                                                    '配合目录监控使用，strm文件创建在/downloads/strm' + '\n' +
+                                                    '通过目录监控转移到link媒体库文件夹 如/downloads/link/strm  mp会完成刮削',
+                                            'style': 'white-space: pre-line;'
                                         }
                                     },
                                     {
@@ -279,7 +280,9 @@ class ANiStrm(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': 'emby需要设置代理，docker的环境变量必须要有http_proxy代理变量，大小写敏感，具体见readme.'
+                                            'text': 'emby需要设置代理，docker的环境变量必须要有http_proxy代理变量，大小写敏感，具体见readme.' + '\n' +
+                                                    'https://github.com/honue/MoviePilot-Plugins#moviepilot-x-ani-strm',
+                                            'style': 'white-space: pre-line;'
                                         }
                                     }
                                 ]
