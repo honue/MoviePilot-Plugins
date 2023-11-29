@@ -118,6 +118,7 @@ class TrackerEditor(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
+                                    'md': 6
                                 },
                                 'content': [
                                     {
@@ -125,6 +126,25 @@ class TrackerEditor(_PluginBase):
                                         'props': {
                                             'model': 'onlyonce',
                                             'label': '立即运行一次',
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 6
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSelect',
+                                        'props': {
+                                            'model': 'downloader_type',
+                                            'label': '下载器类型',
+                                            'items': [
+                                                {'title': 'Qbittorrent', 'value': 'qbittorrent'},
+                                                {'title': 'Transmission', 'value': 'transmission'}
+                                            ]
                                         }
                                     }
                                 ]
@@ -239,7 +259,7 @@ class TrackerEditor(_PluginBase):
                                         'component': 'VTextField',
                                         'props': {
                                             'model': 'replace_domain',
-                                            'label': '用于替换的文本',
+                                            'label': '替换的文本',
                                             'placeholder': 'replace.net'
                                         }
                                     }
@@ -286,6 +306,7 @@ class TrackerEditor(_PluginBase):
             }
         ], {
             "onlyonce": False,
+            "downloader_type": "qbittorrent",
             "host": "192.168.2.100",
             "port": 8989,
             "username": "username",
