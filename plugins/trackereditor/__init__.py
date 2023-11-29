@@ -40,6 +40,7 @@ class TrackerEditor(_PluginBase):
 
     def init_plugin(self, config: dict = None):
         if config:
+            self._onlyonce = config.get("onlyonce")
             self._downloader_type = config.get("downloader_type")
             self._host = config.get("host")
             self._port = config.get("port")
@@ -65,7 +66,7 @@ class TrackerEditor(_PluginBase):
                         if self._target_domain in tracker.url:
                             original_url = tracker.url
                             new_url = tracker.url.replace(self._target_domain, self._replace_domain)
-                            logger.debug(f"{original_url} 替换为\n {new_url}")
+                            logger.info(f"{original_url} 替换为\n {new_url}")
                             torrent.edit_tracker(orig_url=original_url, new_url=new_url)
 
         elif self._downloader_type == "transmission":
@@ -83,7 +84,7 @@ class TrackerEditor(_PluginBase):
                             new_tracker_list.append(new_url)
                         else:
                             new_tracker_list.append(tracker)
-                            logger.debug(f"{tracker} 替换为\n {new_url}")
+                            logger.info(f"{tracker} 替换为\n {new_url}")
                     self._downloader.change_torrent(hash_string=torrent.hashString, tracker_list=new_tracker_list)
         logger.info("tracker替换完成")
 
