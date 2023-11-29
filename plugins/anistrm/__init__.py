@@ -20,8 +20,6 @@ class ANiStrm(_PluginBase):
     plugin_desc = "自动获取当季所有番剧，生成strm文件，mp刮削入库，emby直接播放，免去下载，轻松拥有一个番剧媒体库"
     # 插件图标
     plugin_icon = "https://cdn.jsdelivr.net/gh/honue/MoviePilot-Plugins@main/icon/anistrm.png"
-    # 主题色
-    plugin_color = "#e6e6e6"
     # 插件版本
     plugin_version = "1.2"
     # 插件作者
