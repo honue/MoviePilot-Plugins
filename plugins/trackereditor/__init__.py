@@ -59,33 +59,34 @@ class TrackerEditor(_PluginBase):
             self._downloader = Qbittorrent(self._host, self._port, self._username, self._password)
             torrent_info_list: TorrentInfoList
             torrent_info_list, error = self._downloader.get_torrents()
-
-            if not error:
-                for torrent in torrent_info_list:
-                    for tracker in torrent.trackers:
-                        if self._target_domain in tracker.url:
-                            original_url = tracker.url
-                            new_url = tracker.url.replace(self._target_domain, self._replace_domain)
-                            logger.info(f"{original_url} 替换为\n {new_url}")
-                            torrent.edit_tracker(orig_url=original_url, new_url=new_url)
+            if error:
+                return
+            for torrent in torrent_info_list:
+                for tracker in torrent.trackers:
+                    if self._target_domain in tracker.url:
+                        original_url = tracker.url
+                        new_url = tracker.url.replace(self._target_domain, self._replace_domain)
+                        logger.info(f"{original_url} 替换为\n {new_url}")
+                        torrent.edit_tracker(orig_url=original_url, new_url=new_url)
 
         elif self._downloader_type == "transmission":
             self._downloader = Transmission(self._host, self._port, self._username, self._password)
             torrent_list: List[Torrent]
             torrent_list, error = self._downloader.get_torrents()
+            if error:
+                return
+            for torrent in torrent_list:
+                new_tracker_list = []
+                for tracker in torrent.tracker_list:
+                    new_url = None
+                    if self._target_domain in tracker:
+                        new_url = tracker.replace(self._target_domain, self._replace_domain)
+                        new_tracker_list.append(new_url)
+                    else:
+                        new_tracker_list.append(tracker)
+                        logger.info(f"{tracker} 替换为\n {new_url}")
+                self._downloader.update_tracker(hash_string=torrent.hashString, tracker_list=new_tracker_list)
 
-            if not error:
-                for torrent in torrent_list:
-                    new_tracker_list = []
-                    for tracker in torrent.tracker_list:
-                        new_url = None
-                        if self._target_domain in tracker:
-                            new_url = tracker.replace(self._target_domain, self._replace_domain)
-                            new_tracker_list.append(new_url)
-                        else:
-                            new_tracker_list.append(tracker)
-                            logger.info(f"{tracker} 替换为\n {new_url}")
-                    self._downloader.change_torrent(hash_string=torrent.hashString, tracker_list=new_tracker_list)
         logger.info("tracker替换完成")
 
     def __update_config(self):
