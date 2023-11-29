@@ -7,5 +7,14 @@
         "color": "#051b45",
         "author": "honue",
         "level": 2
+    },
+        "ANiStrm": {
+        "name": "Tracker替换",
+        "description": "批量替换下载器tracker URL",
+        "version": "1.0",
+        "icon": "https://cdn.jsdelivr.net/gh/honue/MoviePilot-Plugins@main/icon/tracker.png",
+        "color": "#051b45",
+        "author": "honue",
+        "level": 1
     }
 }
