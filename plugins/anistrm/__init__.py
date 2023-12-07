@@ -278,7 +278,7 @@ class ANiStrm(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': 'emby需要设置代理，docker的环境变量必须要有http_proxy代理变量，大小写敏感，具体见readme.' + '\n' +
+                                            'text': 'emby容器需要设置代理，docker的环境变量必须要有http_proxy代理变量，大小写敏感，具体见readme.' + '\n' +
                                                     'https://github.com/honue/MoviePilot-Plugins#moviepilot-x-ani-strm',
                                             'style': 'white-space: pre-line;'
                                         }

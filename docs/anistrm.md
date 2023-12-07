@@ -37,7 +37,9 @@
 > /bin/ffprobe -i "https://resources.ani.rip/2023-10/[ANi] 葬送的芙莉蓮 - 02 [1080P][Baha][WEB-DL][AAC AVC][CHT]
 > .mp4?d=true" -threads 0 -v info -print_format json -show_streams -show_chapters -show_format -show_data
 
-emby需要设置代理 **环境变量必须多设置一条，键为小写的http_proxy的代理**
+**emby容器代理设置**
+
+❗ ❗ ❗ **环境变量必须多设置一条，键为小写的http_proxy的代理**
 
 [ffprobe源码](https://github.com/FFmpeg/FFmpeg/blob/master/libavformat/http.c#L218C48-L218C48) 使用getenv_utf8("
 http_proxy") 对大小写敏感。
