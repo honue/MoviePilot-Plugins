@@ -1,8 +1,15 @@
 - [1. ANi-Strm插件](#MoviePilot-x-ANi-Strm)
-    - [注意事项](#注意事项)
     - [2023-10秋 刮削效果](#2023-10秋-刮削效果)
+    - [注意事项](#注意事项)
     - [Todo](#Todo)
-# MoviePilot x ANi-Strm
+## 2023-10秋 刮削效果
+
+<div align="center">
+	<img src="../img/embyani.png">
+</div>
+
+
+## MoviePilot x ANi-Strm
 
 建议配合目录监控使用，strm文件创建在你插件填写的地址 如/downloads/strm
 
@@ -42,12 +49,6 @@ docker-compose env
 - 'HTTP_PROXY=http://127.0.0.1:7890'
 - 'HTTPS_PROXY=http://127.0.0.1:7890'
 ```
-
-## 2023-10秋 刮削效果
-
-<div align="center">
-	<img src="../img/embyani.png">
-</div>
 
 ## Todo:
 
