@@ -21,7 +21,7 @@ class ANiStrm(_PluginBase):
     # 插件图标
     plugin_icon = "https://cdn.jsdelivr.net/gh/honue/MoviePilot-Plugins@main/icons/anistrm.png"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.3"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -279,7 +279,7 @@ class ANiStrm(_PluginBase):
                                             'type': 'info',
                                             'variant': 'tonal',
                                             'text': 'emby容器需要设置代理，docker的环境变量必须要有http_proxy代理变量，大小写敏感，具体见readme.' + '\n' +
-                                                    'https://github.com/honue/MoviePilot-Plugins#moviepilot-x-ani-strm',
+                                                    'https://github.com/honue/MoviePilot-Plugins',
                                             'style': 'white-space: pre-line;'
                                         }
                                     }
