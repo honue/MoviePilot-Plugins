@@ -44,12 +44,17 @@
 [ffprobe源码](https://github.com/FFmpeg/FFmpeg/blob/master/libavformat/http.c#L218C48-L218C48) 使用getenv_utf8("
 http_proxy") 对大小写敏感。
 
-docker-compose env
+emby docker-compose env
 
-```
+```yaml
 - 'http_proxy=http://127.0.0.1:7890'
 - 'HTTP_PROXY=http://127.0.0.1:7890'
 - 'HTTPS_PROXY=http://127.0.0.1:7890'
+```
+另外clash 这两个域名记得设置代理规则
+```
+resources.ani.rip
+aniopen.an-i.workers.dev
 ```
 
 ## Todo:
