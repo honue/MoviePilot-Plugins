@@ -2,8 +2,8 @@
   "ANiStrm": {
     "name": "ANi Strm",
     "description": "自动获取当季所有番剧，生成strm文件，mp刮削入库，emby直接播放，免去下载，轻松拥有一个番剧媒体库",
-    "version": "1.3",
-    "icon": "https://cdn.jsdelivr.net/gh/honue/MoviePilot-Plugins@main/icons/anistrm.png",
+    "version": "1.4",
+    "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/anistrm.png",
     "color": "#051b45",
     "author": "honue",
     "level": 2
@@ -11,8 +11,8 @@
   "TrackerEditor": {
     "name": "Tracker替换",
     "description": "批量替换下载器tracker URL",
-    "version": "1.2",
-    "icon": "https://cdn.jsdelivr.net/gh/honue/MoviePilot-Plugins@main/icons/tracker.png",
+    "version": "1.3",
+    "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/tracker.png",
     "color": "#051b45",
     "author": "honue",
     "level": 1

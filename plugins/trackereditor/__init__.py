@@ -13,9 +13,9 @@ class TrackerEditor(_PluginBase):
     # 插件描述
     plugin_desc = "批量replace种子的tracker qb 4.6.0已测试 tr只支持4.0以上(未测试)"
     # 插件图标
-    plugin_icon = "https://cdn.jsdelivr.net/gh/honue/MoviePilot-Plugins@main/icons/tracker.png"
+    plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/tracker.png"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.3"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -23,7 +23,7 @@ class TrackerEditor(_PluginBase):
     # 插件配置项ID前缀
     plugin_config_prefix = "trackereditor_"
     # 加载顺序
-    plugin_order = 15
+    plugin_order = 20
     # 可使用的用户级别
     auth_level = 1
 
