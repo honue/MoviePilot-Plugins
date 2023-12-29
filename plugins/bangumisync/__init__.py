@@ -38,7 +38,7 @@ class BangumiSync(_PluginBase):
     def init_plugin(self, config: dict = None):
         if config:
             self._enable = config.get('enable')
-            self._user: str = config.get('user') if config.get('user') else None
+            self._user = config.get('user') if config.get('user') else None
             self._token = config.get('token') if config.get('token') else None
             self.__update_config()
 
@@ -57,7 +57,6 @@ class BangumiSync(_PluginBase):
         if event_info.item_type in ["TV"] and \
                 event_info.event in play_start and \
                 event_info.user_name in self._user.split(','):
-            logger.info(event_info)
             """
                 event='playback.pause' channel='emby' item_type='TV' item_name='咒术回战 S1E47 关门' item_id='22646' item_path='/media/cartoon/动漫/咒术回战 (2020)/Season 1/咒术回战 - S01E47 - 第 47 集.mkv' season_id=1 episode_id=47 tmdb_id=None overview='渋谷事変の最終局面に呪術師が集うなかで、脹相は夏油の亡骸に寄生する“黒幕”の正体に気付く。そして、絶体絶命の危機に現れた特級術師・九十九由基。九十九と“黒幕”がそれぞれ語る人類の未来（ネクストステージ...' percentage=2.5705228512861966 ip='127.0.0.1' device_name='Chrome Windows' client='Emby Web' user_name='honue' image_url=None item_favorite=None save_reason=None item_isvirtual=None media_type='Episode'
             """
@@ -204,7 +203,7 @@ class BangumiSync(_PluginBase):
                                         'props': {
                                             'model': 'token',
                                             'label': 'Bangumi Access-token',
-                                            'placeholder': '5'
+                                            'placeholder': 'dY123qxXcdaf234Gj6u3va123Ohh'
                                         }
                                     }
                                 ]
