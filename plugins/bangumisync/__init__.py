@@ -17,7 +17,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -46,7 +46,7 @@ class BangumiSync(_PluginBase):
     def hook(self, event: Event):
         event_info: WebhookEventInfo = event.event_data
         # 只判断开始播放的TV剧集是不是anime 调试加入暂停
-        play_start = "playback.pause|playback.start|media.play|PlaybackStart".split('|')
+        play_start = "playback.start|media.play|PlaybackStart".split('|')
         # 根据路径判断是不是番剧
         path = event_info.item_path
         if not self._enable:
