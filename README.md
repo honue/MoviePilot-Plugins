@@ -12,8 +12,12 @@ https://github.com/honue/MoviePilot-Plugins/main/
 
 - [2. Tracker替换插件](./docs/trackereditor.md)
 
-> 批量替换 tracker 
+> 批量替换 tracker
 
 - [3. Bangumi榜单&想看订阅](https://github.com/honue/MoviePilot-Plugins)
 
 > Bangumi 成员关注动画榜，个人想看订阅
+
+- [4. Bangumi在看同步](https://github.com/honue/MoviePilot-Plugins)
+
+> 将在看记录同步到bangumi
