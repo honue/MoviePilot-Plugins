@@ -9,7 +9,7 @@ from app.utils.http import RequestUtils
 from cachetools import cached, TTLCache
 
 
-class Bangumisync(_PluginBase):
+class BangumiSync(_PluginBase):
     # 插件名称
     plugin_name = "Bangumi在看同步"
     # 插件描述
@@ -51,7 +51,7 @@ class Bangumisync(_PluginBase):
         path = event_info.item_path
         if not self._enable:
             return
-        if not Bangumisync.is_anime(path):
+        if not BangumiSync.is_anime(path):
             return
 
         if event_info.item_type in ["TV"] and \
@@ -76,7 +76,7 @@ class Bangumisync(_PluginBase):
     @staticmethod
     @cached(TTLCache(maxsize=100, ttl=3600))
     def get_subjectid_by_title(title: str, season: int):
-        title = Bangumisync.format_title(title, season)
+        title = BangumiSync.format_title(title, season)
         logger.info(f"获取 {title} subject_id")
         post_json = {
             "keyword": title,
@@ -89,7 +89,7 @@ class Bangumisync(_PluginBase):
         }
         url = f"https://api.bgm.tv/v0/search/subjects"
         ret = RequestUtils(proxies=settings.PROXY,
-                           ua=Bangumisync.UA,
+                           ua=BangumiSync.UA,
                            accept_type="application/json"
                            ).post(url=url, json=post_json).json()
         data: dict = ret.get('data')[0]
@@ -107,7 +107,7 @@ class Bangumisync(_PluginBase):
             ]
         }
         headers = {"Authorization": f"Bearer {self._token}",
-                   "User-Agent": Bangumisync.UA,
+                   "User-Agent": BangumiSync.UA,
                    "content-type": "application/json"}
         resp = RequestUtils(proxies=settings.PROXY,
                             headers=headers
@@ -264,6 +264,6 @@ class Bangumisync(_PluginBase):
 
 
 if __name__ == "__main__":
-    subject_id = Bangumisync.get_subjectid_by_title("葬送的芙莉莲", 1)
-    bangumi = Bangumisync()
+    subject_id = BangumiSync.get_subjectid_by_title("葬送的芙莉莲", 1)
+    bangumi = BangumiSync()
     bangumi.sync_watching_status(subject_id)
