@@ -17,7 +17,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -95,6 +95,7 @@ class BangumiSync(_PluginBase):
         logger.info(f"{title} => {data.get('name')} subject_id:{data.get('id')}")
         return data.get('id')
 
+    @cached(TTLCache(maxsize=10, ttl=600))
     def sync_watching_status(self, subject_id):
         post_data = {
             "type": 3,
