@@ -11,6 +11,41 @@ from app.core.config import settings
 from app.plugins import _PluginBase
 from typing import Any, List, Dict, Tuple, Optional
 from app.log import logger
+import xml.dom.minidom
+from app.utils.dom import DomUtils
+
+
+def retry(ExceptionToCheck: Any,
+          tries: int = 3, delay: int = 3, backoff: int = 2, logger: Any = None, ret: Any = None):
+    """
+    :param ExceptionToCheck: 需要捕获的异常
+    :param tries: 重试次数
+    :param delay: 延迟时间
+    :param backoff: 延迟倍数
+    :param logger: 日志对象
+    :param ret: 默认返回
+    """
+
+    def deco_retry(f):
+        def f_retry(*args, **kwargs):
+            mtries, mdelay = tries, delay
+            while mtries > 0:
+                try:
+                    return f(*args, **kwargs)
+                except ExceptionToCheck as e:
+                    msg = f"{str(e)}, {mdelay} 秒后重试 ..."
+                    if logger:
+                        logger.warn(msg)
+                    else:
+                        print(msg)
+                    time.sleep(mdelay)
+                    mtries -= 1
+                    mdelay *= backoff
+            return ret
+
+        return f_retry
+
+    return deco_retry
 
 
 class ANiStrm(_PluginBase):
@@ -21,7 +56,7 @@ class ANiStrm(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/anistrm.png"
     # 插件版本
-    plugin_version = "1.4"
+    plugin_version = "2.0"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -92,33 +127,43 @@ class ANiStrm(_PluginBase):
                 self._date = f'{current_year}-{month}'
                 return f'{current_year}-{month}'
 
-    def __get_name_list(self) -> List:
+    @retry(Exception, tries=3, logger=logger, ret=[])
+    def get_current_season_list(self) -> List:
         url = f'https://aniopen.an-i.workers.dev/{self.__get_ani_season()}/'
 
-        retries = 0
-        MAX_RETRIES = 3
-        WAIT_TIME_SECONDS = 5
+        rep = RequestUtils(ua=settings.USER_AGENT if settings.USER_AGENT else None,
+                           proxies=settings.PROXY if settings.PROXY else None).post(url=url)
+        logger.debug(rep.text)
+        files_json = rep.json()['files']
+        return [file['name'] for file in files_json]
 
-        while retries < MAX_RETRIES:
-            try:
-                rep = RequestUtils(ua=settings.USER_AGENT if settings.USER_AGENT else None,
-                                   proxies=settings.PROXY if settings.PROXY else None).post(url=url)
-                logger.debug(rep.text)
-                files_json = rep.json()['files']
-                name_list = [file['name'] for file in files_json]
-                return name_list
-            except Exception as e:
-                logger.error(f'本次获取name_list失败')
-                retries += 1
-                if retries < MAX_RETRIES:
-                    logger.info(f'将在 {WAIT_TIME_SECONDS} 秒后重试...')
-                    time.sleep(WAIT_TIME_SECONDS)
-        logger.warning(f'超过重试次数...')
-        return []
-        # self.save_data("history", pulgin_history)
+    @retry(Exception, tries=3, logger=logger, ret=[])
+    def get_latest_list(self) -> List:
+        addr = 'https://api.ani.rip/ani-download.xml'
+        ret = RequestUtils(ua=settings.USER_AGENT if settings.USER_AGENT else None,
+                           proxies=settings.PROXY if settings.PROXY else None).get_res(addr)
+        ret_xml = ret.text
+        ret_array = []
+        # 解析XML
+        dom_tree = xml.dom.minidom.parseString(ret_xml)
+        rootNode = dom_tree.documentElement
+        items = rootNode.getElementsByTagName("item")
+        for item in items:
+            rss_info = {}
+            # 标题
+            title = DomUtils.tag_value(item, "title", default="")
+            # 链接
+            link = DomUtils.tag_value(item, "link", default="")
+            rss_info['title'] = title
+            rss_info['link'] = link
+            ret_array.append(rss_info)
+        return ret_array
 
-    def __touch_strm_file(self, file_name) -> bool:
-        src_url = f'https://resources.ani.rip/{self._date}/{file_name}?d=true'
+    def __touch_strm_file(self, file_name, file_url: str = None) -> bool:
+        if not file_url:
+            src_url = f'https://resources.ani.rip/{self._date}/{file_name}?d=true'
+        else:
+            src_url = file_url
         file_path = f'{self._storageplace}/{file_name}.strm'
         if os.path.exists(file_path):
             logger.debug(f'{file_name}.strm 文件已存在')
@@ -133,14 +178,21 @@ class ANiStrm(_PluginBase):
             return False
 
     def __task(self, fulladd: bool = False):
-        name_list = self.__get_name_list()
-        if not fulladd:
-            name_list = name_list[:15]
-        logger.info(f'本次处理 {len(name_list)} 个文件')
         cnt = 0
-        for file_name in name_list:
-            if self.__touch_strm_file(file_name=file_name):
-                cnt += 1
+        # 增量添加更新
+        if not fulladd:
+            rss_info_list = self.get_latest_list()
+            logger.info(f'本次处理 {len(rss_info_list)} 个文件')
+            for rss_info in rss_info_list:
+                if self.__touch_strm_file(file_name=rss_info['title'], file_url=rss_info['link']):
+                    cnt += 1
+        # 全量添加当季
+        else:
+            name_list = self.get_current_season_list()
+            logger.info(f'本次处理 {len(name_list)} 个文件')
+            for file_name in name_list:
+                if self.__touch_strm_file(file_name=file_name):
+                    cnt += 1
         logger.info(f'新创建了 {cnt} 个strm文件')
 
     def get_state(self) -> bool:
@@ -321,3 +373,9 @@ class ANiStrm(_PluginBase):
                 self._scheduler = None
         except Exception as e:
             logger.error("退出插件失败：%s" % str(e))
+
+
+if __name__ == "__main__":
+    anistrm = ANiStrm()
+    name_list = anistrm.get_latest_list()
+    print(name_list)
