@@ -22,11 +22,11 @@ class BangumiRank(_PluginBase):
     # 插件名称
     plugin_name = "Bangumi榜单 & 想看订阅"
     # 插件描述
-    plugin_desc = "Bangumi 成员关注动画榜，个人想看订阅"
+    plugin_desc = "Bangumi 成员关注动画榜订阅，个人想看订阅"
     # 插件图标
-    plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
+    plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/miku.jpg"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -271,6 +271,28 @@ class BangumiRank(_PluginBase):
                                         'props': {
                                             'model': 'clear',
                                             'label': '清理历史记录',
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': '排行榜数据源自 https://bangumi.tv/anime',
+                                            'style': 'white-space: pre-line;'
                                         }
                                     }
                                 ]

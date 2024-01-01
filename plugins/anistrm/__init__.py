@@ -16,7 +16,7 @@ from app.utils.dom import DomUtils
 
 
 def retry(ExceptionToCheck: Any,
-          tries: int = 3, delay: int = 3, backoff: int = 2, logger: Any = None, ret: Any = None):
+          tries: int = 3, delay: int = 3, backoff: int = 1, logger: Any = None, ret: Any = None):
     """
     :param ExceptionToCheck: 需要捕获的异常
     :param tries: 重试次数
@@ -33,7 +33,7 @@ def retry(ExceptionToCheck: Any,
                 try:
                     return f(*args, **kwargs)
                 except ExceptionToCheck as e:
-                    msg = f"{str(e)}, {mdelay} 秒后重试 ..."
+                    msg = f"未获取到文件信息，{mdelay}秒后重试 ..."
                     if logger:
                         logger.warn(msg)
                     else:
@@ -41,6 +41,8 @@ def retry(ExceptionToCheck: Any,
                     time.sleep(mdelay)
                     mtries -= 1
                     mdelay *= backoff
+            if logger:
+                logger.warn('https://aniopen.an-i.workers.dev/ 请确保当前季度番剧文件夹存在')
             return ret
 
         return f_retry
@@ -56,7 +58,7 @@ class ANiStrm(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/anistrm.png"
     # 插件版本
-    plugin_version = "2.0"
+    plugin_version = "2.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页

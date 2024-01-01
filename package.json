@@ -2,7 +2,7 @@
   "ANiStrm": {
     "name": "ANi Strm",
     "description": "自动获取当季所有番剧，生成strm文件，mp刮削入库，emby直接播放，免去下载，轻松拥有一个番剧媒体库",
-    "version": "2.0",
+    "version": "2.1",
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/anistrm.png",
     "author": "honue",
     "level": 2
@@ -17,9 +17,9 @@
   },
   "BangumiRank": {
     "name": "Bangumi榜单 & 想看订阅",
-    "description": "Bangumi 成员关注动画榜，个人想看订阅",
-    "version": "1.0",
-    "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg",
+    "description": "Bangumi 成员关注动画榜订阅，个人想看订阅",
+    "version": "1.1",
+    "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/miku.jpg",
     "author": "honue",
     "level": 2
   },
