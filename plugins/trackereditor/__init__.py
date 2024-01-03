@@ -23,7 +23,7 @@ class TrackerEditor(_PluginBase):
     # 插件配置项ID前缀
     plugin_config_prefix = "trackereditor_"
     # 加载顺序
-    plugin_order = 20
+    plugin_order = 30
     # 可使用的用户级别
     auth_level = 1
 

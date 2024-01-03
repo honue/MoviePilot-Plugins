@@ -3,21 +3,25 @@
 ### 本仓库地址
 
 ```
-https://github.com/honue/MoviePilot-Plugins/main/
+https://github.com/honue/MoviePilot-Plugins/
 ```
 
-- [1. ANi-Strm插件](./docs/anistrm.md)
+- [ANi-Strm插件](./docs/anistrm.md)
 
-> 从ani open自动抓取，生成strm文件，由mp刮削入库
+> 从[Ani Open](https://aniopen.an-i.workers.dev/)自动抓取，生成strm文件，由mp刮削入库
 
-- [2. Tracker替换插件](./docs/trackereditor.md)
+- Bangumi榜单&想看订阅
+
+> Bangumi [成员关注动画榜](https://bgm.tv/anime)订阅，个人想看订阅
+
+- Bangumi在看同步
+
+> 将emby在看记录，同步到 [bangumi日志](https://bgm.tv/)
+
+- [4. Tracker替换插件](./docs/trackereditor.md)
 
 > 批量替换 tracker
 
-- [3. Bangumi榜单&想看订阅](https://github.com/honue/MoviePilot-Plugins)
+### 如果对你有所帮助⭐
 
-> Bangumi 成员关注动画榜，个人想看订阅
-
-- [4. Bangumi在看同步](https://github.com/honue/MoviePilot-Plugins)
-
-> 将在看记录同步到bangumi
+[![Stargazers over time](https://starchart.cc/honue/MoviePilot-Plugins.svg?background=%23FFFFFF&axis=%23333333&line=%2363beff)](https://starchart.cc/honue/MoviePilot-Plugins)
