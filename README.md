@@ -18,7 +18,7 @@ https://github.com/honue/MoviePilot-Plugins/
 
 > 将emby在看记录，同步到 [bangumi日志](https://bgm.tv/)
 
-- [4. Tracker替换插件](./docs/trackereditor.md)
+- [Tracker替换插件](./docs/trackereditor.md)
 
 > 批量替换 tracker
 

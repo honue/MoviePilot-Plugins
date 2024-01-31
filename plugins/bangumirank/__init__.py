@@ -16,17 +16,19 @@ from app.log import logger
 from app.plugins import _PluginBase
 from app.utils.dom import DomUtils
 from app.utils.http import RequestUtils
+from app.db import get_db
+from app.db.models.subscribe import Subscribe
 
 
 class BangumiRank(_PluginBase):
     # 插件名称
     plugin_name = "Bangumi榜单 & 想看订阅"
     # 插件描述
-    plugin_desc = "Bangumi 成员关注动画榜订阅，个人想看订阅"
+    plugin_desc = "Bangumi 成员关注动画榜，个人想看订阅"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/miku.jpg"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -34,7 +36,7 @@ class BangumiRank(_PluginBase):
     # 插件配置项ID前缀
     plugin_config_prefix = "bangumirank_"
     # 加载顺序
-    plugin_order = 20
+    plugin_order = 30
     # 可使用的用户级别
     auth_level = 2
 
@@ -69,8 +71,11 @@ class BangumiRank(_PluginBase):
             self._wish_top = config.get("wish_top")
             # 排行榜
             self._rank_top = config.get("rank_top")
-
+            # 清理订阅记录
             self._clear = config.get("clear")
+            # 订阅筛选
+            self._include = config.get("include")
+            self._exclude = config.get("exclude")
 
         # 停止现有任务
         self.stop_service()
@@ -133,7 +138,7 @@ class BangumiRank(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -149,7 +154,7 @@ class BangumiRank(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -165,7 +170,7 @@ class BangumiRank(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -173,6 +178,22 @@ class BangumiRank(_PluginBase):
                                         'props': {
                                             'model': 'onlyonce',
                                             'label': '立即运行一次',
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'clear',
+                                            'label': '清理历史记录',
                                         }
                                     }
                                 ]
@@ -267,10 +288,28 @@ class BangumiRank(_PluginBase):
                                 },
                                 'content': [
                                     {
-                                        'component': 'VSwitch',
+                                        'component': 'VTextField',
                                         'props': {
-                                            'model': 'clear',
-                                            'label': '清理历史记录',
+                                            'model': 'include',
+                                            'label': '包含（关键字、正则式）',
+                                            'placeholder': 'ADWeb'
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 6
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'exclude',
+                                            'label': '包含（关键字、正则式）',
+                                            'placeholder': 'exclude'
                                         }
                                     }
                                 ]
@@ -309,7 +348,9 @@ class BangumiRank(_PluginBase):
             "uid": "",
             "wish_top": 0,
             "rank_top": 0,
-            "clear": False
+            "clear": False,
+            "include": "",
+            "exclude": ""
         }
 
     def get_page(self) -> List[dict]:
@@ -442,7 +483,9 @@ class BangumiRank(_PluginBase):
             "clear": self._clear,
             "uid": self._uid,
             "wish_top": self._wish_top,
-            "rank_top": self._rank_top
+            "rank_top": self._rank_top,
+            "include": self._include,
+            "exclude": self._exclude
         })
 
     def __refresh_rss(self):
@@ -513,13 +556,22 @@ class BangumiRank(_PluginBase):
                         logger.info(f'{mediainfo.title_year} 订阅已存在')
                         continue
                     # 添加订阅
-                    self.subscribechain.add(title=mediainfo.title,
-                                            year=mediainfo.year,
-                                            mtype=mediainfo.type,
-                                            tmdbid=mediainfo.tmdb_id,
-                                            season=meta.begin_season,
-                                            exist_ok=True,
-                                            username="bangumi榜单&想看")
+                    sid, msg = self.subscribechain.add(title=mediainfo.title,
+                                                       year=mediainfo.year,
+                                                       mtype=mediainfo.type,
+                                                       tmdbid=mediainfo.tmdb_id,
+                                                       season=meta.begin_season,
+                                                       exist_ok=True,
+                                                       username="bangumi榜单&想看")
+                    db = get_db()
+                    subscribe: Subscribe = Subscribe.get(db, sid)
+                    if not subscribe:
+                        logger.error("订阅不存在，设置过滤关键词失败")
+                        return
+                    subscribe.include = self._include
+                    subscribe.exclude = self._exclude
+                    subscribe.update(db=db, payload=subscribe.to_dict())
+
                     # 存储历史记录
                     history.append({
                         "title": title,
