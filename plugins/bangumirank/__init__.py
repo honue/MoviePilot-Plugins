@@ -22,13 +22,13 @@ from app.db.models.subscribe import Subscribe
 
 class BangumiRank(_PluginBase):
     # 插件名称
-    plugin_name = "Bangumi榜单 & 想看订阅"
+    plugin_name = "Bangumi榜单订阅"
     # 插件描述
-    plugin_desc = "Bangumi 成员关注动画榜，个人想看订阅"
+    plugin_desc = "Bangumi成员关注动画榜，时下流行番剧订阅，个人想看订阅"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/miku.jpg"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.3"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -36,7 +36,7 @@ class BangumiRank(_PluginBase):
     # 插件配置项ID前缀
     plugin_config_prefix = "bangumirank_"
     # 加载顺序
-    plugin_order = 30
+    plugin_order = 20
     # 可使用的用户级别
     auth_level = 2
 
@@ -88,7 +88,7 @@ class BangumiRank(_PluginBase):
                 try:
                     self._scheduler.add_job(func=self.__refresh_rss,
                                             trigger=CronTrigger.from_crontab(self._cron),
-                                            name="Bangumi榜单&想看")
+                                            name="Bangumi榜单")
                 except Exception as e:
                     logger.error(f"Bangumi榜单&想看,订阅服务启动失败，错误信息：{str(e)}")
                     self.systemmessage.put(f"Bangumi榜单&想看,订阅服务启动失败，错误信息：{str(e)}")
@@ -562,7 +562,7 @@ class BangumiRank(_PluginBase):
                                                        tmdbid=mediainfo.tmdb_id,
                                                        season=meta.begin_season,
                                                        exist_ok=True,
-                                                       username="bangumi榜单&想看")
+                                                       username="Bangumi榜单")
                     db = get_db()
                     subscribe: Subscribe = Subscribe.get(db, sid)
                     if not subscribe:

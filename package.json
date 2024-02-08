@@ -8,9 +8,9 @@
     "level": 2
   },
   "BangumiRank": {
-    "name": "Bangumi榜单 & 想看订阅",
-    "description": "Bangumi 成员关注动画榜订阅，个人想看订阅",
-    "version": "1.2",
+    "name": "Bangumi榜单订阅",
+    "description": "Bangumi成员关注动画榜，时下流行番剧订阅，个人想看订阅",
+    "version": "1.3",
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/miku.jpg",
     "author": "honue",
     "level": 2

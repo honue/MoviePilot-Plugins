@@ -12,7 +12,7 @@ https://github.com/honue/MoviePilot-Plugins/
 
 - Bangumi榜单&想看订阅
 
-> Bangumi [成员关注动画榜](https://bgm.tv/anime)订阅，个人想看订阅
+> Bangumi [成员关注动画榜](https://bgm.tv/anime)订阅，时下流行番剧订阅，个人想看订阅
 
 - Bangumi在看同步
 
