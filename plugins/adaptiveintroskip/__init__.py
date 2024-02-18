@@ -13,11 +13,11 @@ class AdaptiveIntroSkip(_PluginBase):
     # 插件名称
     plugin_name = "AdaptiveIntroSkip"
     # 插件描述
-    plugin_desc = "自适应生成IntroSkip片头标记，Emby跳片头"
+    plugin_desc = "自适应生成IntroSkip片头标记，Emby跳片头、片尾"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png"
     # 插件版本
-    plugin_version = "0.1"
+    plugin_version = "0.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -57,7 +57,7 @@ class AdaptiveIntroSkip(_PluginBase):
         current_percentage = event_info.percentage
         current_video_item_id = get_current_video_item_id(item_id=event_info.item_id, playing_idx=event_info.episode_id)
 
-        logger.info(event_info)
+        # logger.info(event_info)
 
         if next_episode_ids:
             # 进度在[0,begin]之间，且是暂停播放后，恢复播放动作，标记片头

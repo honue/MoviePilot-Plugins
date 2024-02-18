@@ -23,7 +23,7 @@ def get_next_episode_ids(item_id, playing_idx) -> list:
         episodes_info = response.json()
         # 查找下一集的 ID
         for episode in episodes_info['Items']:
-            if episode['IndexNumber'] >= playing_idx + 1:
+            if episode['IndexNumber'] >= playing_idx:
                 next_episode_item_id = episode['Id']
                 logger.debug(f'第{playing_idx + 1}集的 item_ID 为: {next_episode_item_id}')
                 ids.append(next_episode_item_id)
