@@ -22,6 +22,9 @@ https://github.com/honue/MoviePilot-Plugins/
 
 > 批量替换 tracker
 
+- [自适应IntroSkip](./docs/introskip.md)
+
+> 自适应生成IntroSkip片头标记，Emby跳片头、片尾
 ### 如果对你有所帮助⭐
 
 [![Stargazers over time](https://starchart.cc/honue/MoviePilot-Plugins.svg?background=%23FFFFFF&axis=%23333333&line=%2363beff)](https://starchart.cc/honue/MoviePilot-Plugins)

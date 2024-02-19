@@ -8,6 +8,7 @@ base_url = settings.EMBY_HOST
 api_key = settings.EMBY_API_KEY
 headers = {'X-Emby-Token': api_key}
 
+
 def format_time(seconds):
     # 将秒数转换为 datetime.timedelta 对象
     delta = datetime.utcfromtimestamp(seconds) - datetime.utcfromtimestamp(0)
@@ -48,40 +49,47 @@ def get_current_video_item_id(item_id, playing_idx):
 
 
 def update_intro(item_id, intro_end):
-    # 每次先移除旧的introskip
-    chapter_info = requests.get(f"http://{base_url}/emby/chapter_api/get_chapters?id={item_id}", headers=headers).json()
-    old_tags = [chapter['Index'] for chapter in chapter_info['chapters'] if chapter['MarkerType'].startswith('Intro')]
-
-    # 删除旧的
-    requests.get(
-        f"http://{base_url}/emby/chapter_api/update_chapters?id={item_id}&index_list={','.join(map(str, old_tags))}&action=remove",
-        headers=headers)
-    # 添加新的片头开始
-    requests.get(
-        f"http://{base_url}/emby/chapter_api/update_chapters?id={item_id}&action=add&name=%E7%89%87%E5%A4%B4&type=intro_start&time=00:00:00.000",
-        headers=headers)
-    # 新的片头结束
-    requests.get(
-        f"http://{base_url}/emby/chapter_api/update_chapters?id={item_id}&action=add&name=%E7%89%87%E5%A4%B4%E7%BB%93%E6%9D%9F&type=intro_end&time={format_time(intro_end)}",
-        headers=headers)
-
-    return intro_end
+    try:
+        # 每次先移除旧的introskip
+        chapter_info = requests.get(f"http://{base_url}/emby/chapter_api/get_chapters?id={item_id}",
+                                    headers=headers).json()
+        old_tags = [chapter['Index'] for chapter in chapter_info['chapters'] if
+                    chapter['MarkerType'].startswith('Intro')]
+        # 删除旧的
+        requests.get(
+            f"http://{base_url}/emby/chapter_api/update_chapters?id={item_id}&index_list={','.join(map(str, old_tags))}&action=remove",
+            headers=headers)
+        # 添加新的片头开始
+        requests.get(
+            f"http://{base_url}/emby/chapter_api/update_chapters?id={item_id}&action=add&name=%E7%89%87%E5%A4%B4&type=intro_start&time=00:00:00.000",
+            headers=headers)
+        # 新的片头结束
+        requests.get(
+            f"http://{base_url}/emby/chapter_api/update_chapters?id={item_id}&action=add&name=%E7%89%87%E5%A4%B4%E7%BB%93%E6%9D%9F&type=intro_end&time={format_time(intro_end)}",
+            headers=headers)
+        return intro_end
+    except Exception as e:
+        logger.error("异常错误：%s" % str(e))
 
 
 def update_credits(item_id, credits_start):
-    chapter_info = requests.get(f"http://{base_url}/emby/chapter_api/get_chapters?id={item_id}", headers=headers).json()
-    old_tags = [chapter['Index'] for chapter in chapter_info['chapters'] if chapter['MarkerType'].startswith('Credits')]
-    # 删除旧的
-    requests.get(
-        f"http://{base_url}/emby/chapter_api/update_chapters?id={item_id}&index_list={','.join(map(str, old_tags))}&action=remove",
-        headers=headers)
+    try:
+        chapter_info = requests.get(f"http://{base_url}/emby/chapter_api/get_chapters?id={item_id}",
+                                    headers=headers).json()
+        old_tags = [chapter['Index'] for chapter in chapter_info['chapters'] if
+                    chapter['MarkerType'].startswith('Credits')]
+        # 删除旧的
+        requests.get(
+            f"http://{base_url}/emby/chapter_api/update_chapters?id={item_id}&index_list={','.join(map(str, old_tags))}&action=remove",
+            headers=headers)
 
-    # 添加新的片尾开始
-    requests.get(
-        f"http://{base_url}/emby/chapter_api/update_chapters?id={item_id}&action=add&name=%E7%89%87%E5%B0%BE&type=credits_start&time={format_time(credits_start)}",
-        headers=headers)
-
-    return credits_start
+        # 添加新的片尾开始
+        requests.get(
+            f"http://{base_url}/emby/chapter_api/update_chapters?id={item_id}&action=add&name=%E7%89%87%E5%B0%BE&type=credits_start&time={format_time(credits_start)}",
+            headers=headers)
+        return credits_start
+    except Exception as e:
+        logger.error("异常错误：%s" % str(e))
 
 
 def get_total_time(item_id):
@@ -101,6 +109,28 @@ def get_total_time(item_id):
     except Exception as e:
         logger.error("异常错误：%s" % str(e))
         return 0
+
+
+def include_keyword(path: str, keywords: str) -> dict:
+    """
+        return True 表示本条可取，return False表示不可取
+    """
+    keyword_list: list = keywords.split(',')
+    for keyword in keyword_list:
+        if keyword not in path:
+            return {'ret': False, 'msg': keyword}
+    return {'ret': True, 'msg': ''}
+
+
+def exclude_keyword(path: str, keywords: str):
+    """
+        return True 表示本条可取，return False表示不可取
+    """
+    keyword_list: list = keywords.split(',')
+    for keyword in keyword_list:
+        if keyword in path:
+            return {'ret': False, 'msg': keyword}
+    return {'ret': True, 'msg': ''}
 
 
 if __name__ == '__main__':
