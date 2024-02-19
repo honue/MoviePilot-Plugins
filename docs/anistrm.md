@@ -5,7 +5,7 @@
 ## 2023-10秋 刮削效果
 
 <div align="center">
-	<img src="../img/embyani.png">
+	<img src="./img/embyani.png">
 </div>
 
 
@@ -20,13 +20,13 @@
 ```
 
 <div align="center">
-	<img src="../img/link.png" width="200px">
+	<img src="./img/link.png" width="200px">
 </div>
 
 不开启一次性创建全部，则每次运行会创建ani最新季度的top15个文件。
 
 <div align="center">
-	<img src="../img/pic1.png">
+	<img src="./img/pic1.png">
 </div>
 
 > 非常感谢 https://aniopen.an-i.workers.dev TG:[Channel_ANi](https://t.me/channel_ani)
