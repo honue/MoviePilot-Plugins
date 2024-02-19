@@ -12,7 +12,7 @@ class AdaptiveIntroSkip(_PluginBase):
     # 插件名称
     plugin_name = "自适应IntroSkip"
     # 插件描述
-    plugin_desc = "自适应生成IntroSkip片头标记，Emby跳片头、片尾"
+    plugin_desc = "自适应生成IntroSkip片头片尾标记，Emby跳片头、片尾"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png"
     # 插件版本
