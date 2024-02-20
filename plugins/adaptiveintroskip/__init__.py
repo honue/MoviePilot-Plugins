@@ -16,7 +16,7 @@ class AdaptiveIntroSkip(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -36,12 +36,12 @@ class AdaptiveIntroSkip(_PluginBase):
 
     def init_plugin(self, config: dict = None):
         if config:
-            self._enable = config.get("enable") if config.get("enable") else False
-            self._begin_min = float(config.get("begin_min") if config.get("begin_min") else 4)
-            self._end_min = float(config.get("end_min") if config.get("end_min") else 6)
+            self._enable = config.get("enable") or False
+            self._begin_min = float(config.get("begin_min") or 4)
+            self._end_min = float(config.get("end_min") or 6)
             # 关键词
-            self._include = config.get("include") if config.get("include") else ''
-            self._exclude = config.get("exclude") if config.get("exclude") else ''
+            self._include = config.get("include") or ''
+            self._exclude = config.get("exclude") or ''
 
     @eventmanager.register(EventType.WebhookMessage)
     def hook(self, event: Event):
@@ -58,7 +58,7 @@ class AdaptiveIntroSkip(_PluginBase):
         if not include_ret.get('ret') \
                 or not exclude_ret.get('ret'):
             logger.info(
-                f"受关键词{include_ret.get('msg')} {exclude_ret.get('msg')} 限制，{event_info.item_path} 不标记片头片尾")
+                f"受关键词{include_ret.get('msg')}{exclude_ret.get('msg')}限制，{event_info.item_path} 不标记片头片尾")
             return
 
         logger.debug(event_info)

@@ -96,12 +96,11 @@ def get_total_time(item_id):
     try:
         response = requests.get(f'http://{base_url}/emby/Items/{item_id}/PlaybackInfo?api_key={api_key}')
         video_info = response.json()
-        print(video_info)
         if video_info['MediaSources']:
             video_info = video_info['MediaSources'][0]
             total_time_ticks = video_info['RunTimeTicks']
             total_time_seconds = total_time_ticks / 10000000  # 将 ticks 转换为秒
-            logger.info(f"{video_info['Name']} 总时长为{total_time_seconds}秒")
+            # logger.info(f"{video_info['Name']} 总时长为{total_time_seconds}秒")
             return total_time_seconds
         else:
             logger.error("无法获取视频总时长")
@@ -112,9 +111,6 @@ def get_total_time(item_id):
 
 
 def include_keyword(path: str, keywords: str) -> dict:
-    """
-        return True 表示本条可取，return False表示不可取
-    """
     keyword_list: list = keywords.split(',')
     for keyword in keyword_list:
         if keyword not in path:
@@ -122,11 +118,8 @@ def include_keyword(path: str, keywords: str) -> dict:
     return {'ret': True, 'msg': ''}
 
 
-def exclude_keyword(path: str, keywords: str):
-    """
-        return True 表示本条可取，return False表示不可取
-    """
-    keyword_list: list = keywords.split(',')
+def exclude_keyword(path: str, keywords: str) -> dict:
+    keyword_list: list = keywords.split(',') if keywords else []
     for keyword in keyword_list:
         if keyword in path:
             return {'ret': False, 'msg': keyword}
