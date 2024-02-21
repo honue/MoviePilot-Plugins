@@ -38,5 +38,13 @@
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png",
     "author": "honue",
     "level": 1
+  },
+  "RemoteIdentifiers": {
+    "name": "共享识别词",
+    "description": "从Github远程文件中，获取共享识别词添加",
+    "version": "1.0",
+    "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/words.png",
+    "author": "honue",
+    "level": 1
   }
 }
