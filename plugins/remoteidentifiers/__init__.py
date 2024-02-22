@@ -22,7 +22,7 @@ class RemoteIdentifiers(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/words.png"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -38,6 +38,7 @@ class RemoteIdentifiers(_PluginBase):
     _cron = '30 4 * * *'
     _file_urls = ''
     _onlyonce = False
+    _flitter = False
     # 定时器
     _scheduler = None
 
@@ -49,6 +50,7 @@ class RemoteIdentifiers(_PluginBase):
             self._onlyonce = config.get("onlyonce") or False
             self._cron = config.get("cron") or '30 4 * * *'
             self._file_urls = config.get("file_urls") or ''
+            self._flitter = config.get("flitter") or False
             # config操作
             self.systemconfig = SystemConfigOper()
 
@@ -94,10 +96,11 @@ class RemoteIdentifiers(_PluginBase):
             identifiers: List[str] = text.split('\n')
             ret += identifiers
         # flitter 过滤空行和#注释
-        for item in ret:
-            if item == '' or item.find('#') == 0:
-                ret.remove(item)
-                logger.debug(f"过滤远端识别词 {item} ")
+        if self._flitter:
+            for item in ret:
+                if item == '' or item.find('#') == 0:
+                    ret.remove(item)
+                    logger.debug(f"过滤远端识别词 {item} ")
         logger.info(f"获取到远端识别词{len(ret) - 1}条: {ret[1:]}")
         return ret
 
@@ -129,7 +132,7 @@ class RemoteIdentifiers(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -144,7 +147,7 @@ class RemoteIdentifiers(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -159,7 +162,22 @@ class RemoteIdentifiers(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'flitter',
+                                            'label': '过滤注释、空白行',
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -257,6 +275,7 @@ class RemoteIdentifiers(_PluginBase):
         ], {
             "enable": False,
             "onlyonce": False,
+            "flitter": False,
             "cron": '30 4 * * *',
             "file_urls": '',
         }
@@ -266,6 +285,7 @@ class RemoteIdentifiers(_PluginBase):
             "onlyonce": self._onlyonce,
             "cron": self._cron,
             "enable": self._enable,
+            "flitter": self._flitter,
             "file_urls": self._file_urls,
         })
 
