@@ -22,7 +22,7 @@ class RemoteIdentifiers(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/words.png"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -78,8 +78,14 @@ class RemoteIdentifiers(_PluginBase):
     def get_file_content(self, file_urls: list) -> List[str]:
         ret: List[str] = ['======以下识别词由RemoteIdentifiers插件添加======']
         for file_url in file_urls:
+            # https://etherpad.wikimedia.org/p/mp_anime_words
+            if file_url.find("etherpad") and file_url.find("export") < 0:
+                real_url = file_url + "/export/txt"
+            else:
+                real_url = file_url
             response = res = RequestUtils(proxies=settings.PROXY,
-                                          headers=settings.GITHUB_HEADERS, timeout=15).get_res(file_url)
+                                          headers=settings.GITHUB_HEADERS if real_url.find("git") else None,
+                                          timeout=15).get_res(real_url)
             if not response:
                 logger.warn(f"文件 {file_url} 下载失败！")
             elif response.status_code != 200:
@@ -87,6 +93,11 @@ class RemoteIdentifiers(_PluginBase):
             text = response.content.decode('utf-8')
             identifiers: List[str] = text.split('\n')
             ret += identifiers
+        # flitter 过滤空行和#注释
+        for item in ret:
+            if item == '' or item.find('#') == 0:
+                ret.remove(item)
+                logger.debug(f"过滤远端识别词 {item} ")
         logger.info(f"获取到远端识别词{len(ret) - 1}条: {ret[1:]}")
         return ret
 
@@ -202,6 +213,13 @@ class RemoteIdentifiers(_PluginBase):
                                             'variant': 'tonal',
                                             'text': '有愿意持续更新识别词的可以找我，我会将地址放在这推荐给大家！文件格式就是建个txt识别词一行一个。'
                                         }
+                                    }, {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'success',
+                                            'variant': 'tonal',
+                                            'text': '下面提供几个共享词库给大家，大家也可以直接打开编辑。在此感谢每一位贡献者！！！'
+                                        }
                                     }
                                 ]
                             }
@@ -220,7 +238,14 @@ class RemoteIdentifiers(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '示例 https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/data/test_words.txt'
+                                            'text': '番剧 https://etherpad.wikimedia.org/p/mp_anime_words'
+                                        }
+                                    }, {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': '电视剧 https://etherpad.wikimedia.org/p/mp_series_words'
                                         }
                                     }
                                 ]
