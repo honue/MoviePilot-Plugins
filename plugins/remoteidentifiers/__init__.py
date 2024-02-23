@@ -12,17 +12,18 @@ from app.log import logger
 from app.plugins import _PluginBase
 from ...db.systemconfig_oper import SystemConfigOper
 from ...schemas.types import SystemConfigKey
+from app.utils.common import retry
 
 
 class RemoteIdentifiers(_PluginBase):
     # 插件名称
     plugin_name = "共享识别词"
     # 插件描述
-    plugin_desc = "从Github远程文件中，获取共享识别词并添加"
+    plugin_desc = "从Github、Etherpad远程文件中，获取共享识别词并添加"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/words.png"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.3"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -38,7 +39,7 @@ class RemoteIdentifiers(_PluginBase):
     _cron = '30 4 * * *'
     _file_urls = ''
     _onlyonce = False
-    _flitter = False
+    _flitter = True
     # 定时器
     _scheduler = None
 
@@ -50,7 +51,7 @@ class RemoteIdentifiers(_PluginBase):
             self._onlyonce = config.get("onlyonce") or False
             self._cron = config.get("cron") or '30 4 * * *'
             self._file_urls = config.get("file_urls") or ''
-            self._flitter = config.get("flitter") or False
+            self._flitter = config.get("flitter") or True
             # config操作
             self.systemconfig = SystemConfigOper()
 
@@ -77,6 +78,7 @@ class RemoteIdentifiers(_PluginBase):
                 self._scheduler.print_jobs()
                 self._scheduler.start()
 
+    @retry(Exception, tries=3, delay=3, backoff=2, logger=logger)
     def get_file_content(self, file_urls: list) -> List[str]:
         ret: List[str] = ['======以下识别词由RemoteIdentifiers插件添加======']
         for file_url in file_urls:
@@ -89,18 +91,21 @@ class RemoteIdentifiers(_PluginBase):
                                           headers=settings.GITHUB_HEADERS if real_url.find("git") else None,
                                           timeout=15).get_res(real_url)
             if not response:
-                logger.warn(f"文件 {file_url} 下载失败！")
+                raise Exception("文件 {file_url} 下载失败！")
             elif response.status_code != 200:
-                logger.warn(f"下载文件 {file_url} 失败：{res.status_code} - {res.reason}")
+                raise Exception(f"下载文件 {file_url} 失败：{res.status_code} - {res.reason}")
             text = response.content.decode('utf-8')
+            if text.find("doctype html") > 0:
+                raise Exception(f"下载文件 {file_url} 失败：{res.status_code} - {res.reason}")
             identifiers: List[str] = text.split('\n')
             ret += identifiers
-        # flitter 过滤空行和#注释
+        # flitter 过滤空行
         if self._flitter:
+            filtered_ret = []
             for item in ret:
-                if item == '' or item.find('#') == 0:
-                    ret.remove(item)
-                    logger.debug(f"过滤远端识别词 {item} ")
+                if item != '':
+                    filtered_ret.append(item)
+            ret = filtered_ret
         logger.info(f"获取到远端识别词{len(ret) - 1}条: {ret[1:]}")
         return ret
 
@@ -153,8 +158,8 @@ class RemoteIdentifiers(_PluginBase):
                                     {
                                         'component': 'VSwitch',
                                         'props': {
-                                            'model': 'onlyonce',
-                                            'label': '立即运行一次',
+                                            'model': 'flitter',
+                                            'label': '过滤空白行',
                                         }
                                     }
                                 ]
@@ -168,8 +173,8 @@ class RemoteIdentifiers(_PluginBase):
                                     {
                                         'component': 'VSwitch',
                                         'props': {
-                                            'model': 'flitter',
-                                            'label': '过滤注释、空白行',
+                                            'model': 'onlyonce',
+                                            'label': '立即运行一次',
                                         }
                                     }
                                 ]
@@ -256,14 +261,14 @@ class RemoteIdentifiers(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '番剧 https://etherpad.wikimedia.org/p/mp_anime_words'
+                                            'text': '电视剧：https://etherpad.wikimedia.org/p/mp_series_words'
                                         }
                                     }, {
                                         'component': 'VAlert',
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '电视剧 https://etherpad.wikimedia.org/p/mp_series_words'
+                                            'text': '番剧：https://etherpad.wikimedia.org/p/mp_anime_words'
                                         }
                                     }
                                 ]
@@ -275,7 +280,7 @@ class RemoteIdentifiers(_PluginBase):
         ], {
             "enable": False,
             "onlyonce": False,
-            "flitter": False,
+            "flitter": True,
             "cron": '30 4 * * *',
             "file_urls": '',
         }
