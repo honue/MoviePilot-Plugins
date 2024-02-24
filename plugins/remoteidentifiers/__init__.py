@@ -78,7 +78,7 @@ class RemoteIdentifiers(_PluginBase):
                 self._scheduler.print_jobs()
                 self._scheduler.start()
 
-    @retry(Exception, tries=3, delay=3, backoff=2, logger=logger)
+    @retry(Exception, tries=3, delay=5, backoff=2, logger=logger)
     def get_file_content(self, file_urls: list) -> List[str]:
         ret: List[str] = ['======以下识别词由RemoteIdentifiers插件添加======']
         for file_url in file_urls:
@@ -87,16 +87,16 @@ class RemoteIdentifiers(_PluginBase):
                 real_url = file_url + "/export/txt"
             else:
                 real_url = file_url
-            response = res = RequestUtils(proxies=settings.PROXY,
+            response = RequestUtils(proxies=settings.PROXY,
                                           headers=settings.GITHUB_HEADERS if real_url.find("git") else None,
                                           timeout=15).get_res(real_url)
             if not response:
-                raise Exception("文件 {file_url} 下载失败！")
+                raise Exception(f"文件 {file_url} 下载失败！")
             elif response.status_code != 200:
-                raise Exception(f"下载文件 {file_url} 失败：{res.status_code} - {res.reason}")
+                raise Exception(f"下载文件 {file_url} 失败：{response.status_code} - {response.reason}")
             text = response.content.decode('utf-8')
             if text.find("doctype html") > 0:
-                raise Exception(f"下载文件 {file_url} 失败：{res.status_code} - {res.reason}")
+                raise Exception(f"下载文件 {file_url} 失败：{response.status_code} - {response.reason}")
             identifiers: List[str] = text.split('\n')
             ret += identifiers
         # flitter 过滤空行
