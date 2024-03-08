@@ -1,6 +1,4 @@
-# MoviePilot-Plugins
-
-### 本仓库地址
+### MoviePilot-Plugins 本仓库地址
 
 ```
 https://github.com/honue/MoviePilot-Plugins/
@@ -29,6 +27,10 @@ https://github.com/honue/MoviePilot-Plugins/
 - 共享识别词
 
 > 从Github远程文件中，获取共享识别词并添加
+
+- 收藏更新通知
+
+> 在Emby上收藏剧集，当有新集更新时发送通知。适合针对性的获取剧集更新通知、榜单订阅时有不看的剧集不想收到更新通知。
 ### 如果对你有所帮助⭐
 
 [![Stargazers over time](https://starchart.cc/honue/MoviePilot-Plugins.svg?background=%23FFFFFF&axis=%23333333&line=%2363beff)](https://starchart.cc/honue/MoviePilot-Plugins)
