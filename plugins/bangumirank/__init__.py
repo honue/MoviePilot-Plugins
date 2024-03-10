@@ -28,7 +28,7 @@ class BangumiRank(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/miku.jpg"
     # 插件版本
-    plugin_version = "1.3"
+    plugin_version = "1.4"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -36,7 +36,7 @@ class BangumiRank(_PluginBase):
     # 插件配置项ID前缀
     plugin_config_prefix = "bangumirank_"
     # 加载顺序
-    plugin_order = 20
+    plugin_order = 15
     # 可使用的用户级别
     auth_level = 2
 
@@ -291,7 +291,7 @@ class BangumiRank(_PluginBase):
                                         'component': 'VTextField',
                                         'props': {
                                             'model': 'include',
-                                            'label': '包含（关键字、正则式）',
+                                            'label': '订阅规则，包含（关键字、正则式）',
                                             'placeholder': 'ADWeb'
                                         }
                                     }
@@ -308,7 +308,7 @@ class BangumiRank(_PluginBase):
                                         'component': 'VTextField',
                                         'props': {
                                             'model': 'exclude',
-                                            'label': '包含（关键字、正则式）',
+                                            'label': '订阅规则，不包含（关键字、正则式）',
                                             'placeholder': 'exclude'
                                         }
                                     }
