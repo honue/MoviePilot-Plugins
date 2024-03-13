@@ -31,6 +31,10 @@ https://github.com/honue/MoviePilot-Plugins/
 - 收藏更新通知
 
 > 在Emby上收藏剧集，当有新集更新时发送通知。适合针对性的获取剧集更新通知、榜单订阅时有不看的剧集不想收到更新通知。
+
+- 豆瓣书影音档案
+
+> 将在看的剧集自动同步到[豆瓣书影音档案](https://www.douban.com/note/745865495)
 ### 如果对你有所帮助⭐
 
 [![Stargazers over time](https://starchart.cc/honue/MoviePilot-Plugins.svg?background=%23FFFFFF&axis=%23333333&line=%2363beff)](https://starchart.cc/honue/MoviePilot-Plugins)
