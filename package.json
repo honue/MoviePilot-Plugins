@@ -15,19 +15,11 @@
     "author": "honue",
     "level": 1
   },
-    "DouBanWatching": {
+  "DouBanWatching": {
     "name": "豆瓣书影音档案",
     "description": "将在看的剧集同步到豆瓣书影音档案",
-    "version": "1.0",
+    "version": "1.1",
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/douban.png",
-    "author": "honue",
-    "level": 1
-  },
-  "FollowNotify": {
-    "name": "收藏更新通知",
-    "description": "在Emby上收藏剧集，当有新集更新时发送通知。适合针对性的获取剧集更新通知、榜单订阅时有不看的剧集不想收到更新通知。",
-    "version": "1.0",
-    "icon": "like.jpg",
     "author": "honue",
     "level": 1
   },
@@ -39,6 +31,14 @@
     "author": "honue",
     "level": 2
   },
+  "FollowNotify": {
+    "name": "收藏更新通知",
+    "description": "在Emby上收藏剧集，当有新集更新时发送通知。适合针对性的获取剧集更新通知、榜单订阅时有不看的剧集不想收到更新通知。",
+    "version": "1.0",
+    "icon": "like.jpg",
+    "author": "honue",
+    "level": 1
+  },
   "BangumiSync": {
     "name": "Bangumi在看同步",
     "description": "将你在媒体库上的番剧观看，同步到Bangumi在看状态，受api限制暂不能同步具体番剧集数",
@@ -46,13 +46,5 @@
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg",
     "author": "honue",
     "level": 2
-  },
-  "TrackerEditor": {
-    "name": "Tracker替换",
-    "description": "批量替换下载器tracker URL",
-    "version": "1.3",
-    "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/tracker.png",
-    "author": "honue",
-    "level": 1
   }
 }

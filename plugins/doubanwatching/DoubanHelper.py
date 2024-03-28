@@ -41,6 +41,7 @@ class DoubanHelper:
         url = f"https://www.douban.com/search?cat=1002&q={title}"
         response = RequestUtils(headers=self.headers).get_res(url)
         if not response.status_code == 200:
+            logger.error(f"搜索 {title} 失败 状态码：{response.status_code}")
             return None
         # self.headers["Cookie"] = response.cookies
         soup = BeautifulSoup(response.text.encode('utf-8'), 'lxml')
@@ -73,6 +74,7 @@ class DoubanHelper:
 
         for subject_item in subject_items:
             return subject_item["title"], subject_item["subject_id"]
+        logger.error(f"找不到 {title} 相关条目 搜索结果html:{response.text.encode('utf-8')}")
         return None, None
 
     def set_watching_status(self, subject_id: str, private: bool = True) -> bool:
