@@ -14,12 +14,10 @@ from app.utils.http import RequestUtils
 class DoubanHelper:
 
     def __init__(self):
-        self.cookiecloud = CookieCloudHelper(
-            server=settings.COOKIECLOUD_HOST,
-            key=settings.COOKIECLOUD_KEY,
-            password=settings.COOKIECLOUD_PASSWORD
-        )
+        self.cookiecloud = CookieCloudHelper()
         cookie_dict, msg = self.cookiecloud.download()
+        if cookie_dict is None:
+            logger.error(msg)
         self.cookies = cookie_dict.get("douban.com")
         if not cookie_dict or not self.cookies:
             logger.error(f"获取豆瓣cookie错误 {msg}")
@@ -72,9 +70,10 @@ class DoubanHelper:
                     item["subject_id"] = subject_id
             subject_items.append(item)
 
+        if not subject_items:
+            logger.error(f"找不到 {title} 相关条目 搜索结果html:{response.text.encode('utf-8')}")
         for subject_item in subject_items:
             return subject_item["title"], subject_item["subject_id"]
-        logger.error(f"找不到 {title} 相关条目 搜索结果html:{response.text.encode('utf-8')}")
         return None, None
 
     def set_watching_status(self, subject_id: str, private: bool = True) -> bool:
