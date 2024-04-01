@@ -3,7 +3,7 @@ from typing import List, Tuple
 from urllib.parse import unquote
 
 from bs4 import BeautifulSoup
-
+from http.cookies import SimpleCookie
 from app.core.config import settings
 from app.core.meta import MetaBase
 from app.helper.cookiecloud import CookieCloudHelper
@@ -19,9 +19,10 @@ class DoubanHelper:
         if cookie_dict is None:
             logger.error(msg)
         self.cookies = cookie_dict.get("douban.com")
+        self.cookies = SimpleCookie(self.cookies)
+        self.cookies = {k: v.value for k, v in self.cookies.items()}
+        self.ck = self.cookies['ck']
 
-        match = re.search(r'ck=(.*?);', self.cookies)
-        self.ck = match.group(1) if match else None
         if not cookie_dict:
             logger.error(f"获取cookiecloud数据错误 {msg}")
 
@@ -102,7 +103,7 @@ class DoubanHelper:
             url=f"https://movie.douban.com/j/subject/{subject_id}/interest",
             data=data_json)
         if not response:
-            logger.error(f"{response.text} ck:{self.ck}")
+            logger.error(f"{response} ck:{self.ck} cookie:{self.cookies}")
             return False
         if response.status_code == 200:
             logger.debug(response.text)
@@ -114,4 +115,4 @@ class DoubanHelper:
 if __name__ == "__main__":
     doubanHelper = DoubanHelper()
     subject_title, subject_id = doubanHelper.get_subject_id("秘密森林2")
-    doubanHelper.set_watching_status(subject_id=subject_id, private=True)
+    doubanHelper.set_watching_status(subject_id=subject_id, status="do", private=True)

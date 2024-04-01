@@ -86,7 +86,7 @@ class DouBanWatching(_PluginBase):
 
             if len(episodes) == episode_id:
                 status = "collect"
-                logger.info(f"当前播放 {title} 第{episode_id}集 为最后一集，标记为看过")
+                logger.info(f"{title} 第{episode_id}集 为最后一集，标记为看过")
             else:
                 status = "do"
 
