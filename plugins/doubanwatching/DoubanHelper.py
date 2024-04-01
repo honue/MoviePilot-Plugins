@@ -95,11 +95,12 @@ class DoubanHelper:
             url=f"https://movie.douban.com/j/subject/{subject_id}/interest",
             data=data_json)
         if not response:
+            logger.error(f"{response.text} cookie:{self.cookies}")
             return False
         if response.status_code == 200:
             logger.debug(response.text)
             return True
-
+        logger.error(response.text)
         return False
 
 
