@@ -19,7 +19,11 @@ class DoubanHelper:
         if cookie_dict is None:
             logger.error(msg)
         self.cookies = cookie_dict.get("douban.com")
-        if not cookie_dict or not self.cookies:
+
+        match = re.search(r'ck=(.*?);', self.cookies)
+        self.ck = match.group(1) if match else None
+
+        if not cookie_dict or not self.cookies or not self.ck:
             logger.error(f"获取豆瓣cookie错误 {msg}")
         self.headers = {
             'User-Agent': settings.USER_AGENT,
@@ -82,7 +86,7 @@ class DoubanHelper:
         self.headers["Host"] = "movie.douban.com"
         self.headers["Cookie"] = self.cookies
         data_json = {
-            "ck": "pv4g",
+            "ck": self.ck,
             "interest": "do",
             "rating": "",
             "foldcollect": "U",
@@ -95,7 +99,7 @@ class DoubanHelper:
             url=f"https://movie.douban.com/j/subject/{subject_id}/interest",
             data=data_json)
         if not response:
-            logger.error(f"{response.text} cookie:{self.cookies}")
+            logger.error(f"{response.text} ck:{self.ck}")
             return False
         if response.status_code == 200:
             logger.debug(response.text)
