@@ -28,8 +28,7 @@ class DoubanHelper:
             'Accept-Language': 'zh-CN,zh;q=0.8,en-US;q=0.6,en;q=0.4,en-GB;q=0.2,zh-TW;q=0.2',
             'Connection': 'keep-alive',
             'DNT': '1',
-            'HOST': 'www.douban.com',
-            'Cookie': self.cookies
+            'HOST': 'www.douban.com'
         }
 
     def get_subject_id(self, title: str = None, meta: MetaBase = None) -> Tuple | None:
@@ -73,6 +72,7 @@ class DoubanHelper:
         if not subject_items:
             logger.error(f"找不到 {title} 相关条目 搜索结果html:{response.text.encode('utf-8')}")
         for subject_item in subject_items:
+            logger.debug(f"{subject_item['title']} {subject_item['subject_id']}")
             return subject_item["title"], subject_item["subject_id"]
         return None, None
 
@@ -80,7 +80,7 @@ class DoubanHelper:
         self.headers["Referer"] = f"https://movie.douban.com/subject/{subject_id}/"
         self.headers["Origin"] = "https://movie.douban.com"
         self.headers["Host"] = "movie.douban.com"
-
+        self.headers["Cookie"] = self.cookies
         data_json = {
             "ck": "pv4g",
             "interest": "do",
@@ -97,6 +97,7 @@ class DoubanHelper:
         if not response:
             return False
         if response.status_code == 200:
+            logger.debug(response.text)
             return True
 
         return False
