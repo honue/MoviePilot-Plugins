@@ -22,9 +22,11 @@ class DoubanHelper:
 
         match = re.search(r'ck=(.*?);', self.cookies)
         self.ck = match.group(1) if match else None
+        if not cookie_dict:
+            logger.error(f"获取cookiecloud数据错误 {msg}")
 
-        if not cookie_dict or not self.cookies or not self.ck:
-            logger.error(f"获取豆瓣cookie错误 {msg}")
+        if not self.cookies or not self.ck:
+            logger.error(f"豆瓣cookie错误 ck:{self.ck} cookies:{self.cookies}")
         self.headers = {
             'User-Agent': settings.USER_AGENT,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
