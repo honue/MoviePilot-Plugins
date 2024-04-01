@@ -82,7 +82,7 @@ class DoubanHelper:
             return subject_item["title"], subject_item["subject_id"]
         return None, None
 
-    def set_watching_status(self, subject_id: str, private: bool = True) -> bool:
+    def set_watching_status(self, subject_id: str, status: str = "do", private: bool = True) -> bool:
         self.headers["Referer"] = f"https://movie.douban.com/subject/{subject_id}/"
         self.headers["Origin"] = "https://movie.douban.com"
         self.headers["Host"] = "movie.douban.com"
@@ -97,6 +97,7 @@ class DoubanHelper:
         }
         if private:
             data_json["private"] = "on"
+        data_json["interest"] = status
         response = RequestUtils(headers=self.headers, timeout=10).post_res(
             url=f"https://movie.douban.com/j/subject/{subject_id}/interest",
             data=data_json)

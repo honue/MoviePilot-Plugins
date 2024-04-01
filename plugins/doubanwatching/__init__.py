@@ -1,21 +1,20 @@
 from typing import Dict, Any
 
-from app.core.config import settings
+from app.chain.media import MediaChain
 from app.core.event import eventmanager, Event
 from app.core.metainfo import MetaInfo
-from app.helper.cookiecloud import CookieCloudHelper
-from app.log import logger
 from app.plugins import _PluginBase
+from app.plugins.doubanwatching.DoubanHelper import *
 from app.schemas import WebhookEventInfo, MediaInfo
 from app.schemas.types import EventType, MediaType
-from app.plugins.doubanwatching.DoubanHelper import *
+from app.log import logger
 
 
 class DouBanWatching(_PluginBase):
     # 插件名称
     plugin_name = "豆瓣书影音档案"
     # 插件描述
-    plugin_desc = "将在看的剧集自动同步到豆瓣书影音档案"
+    plugin_desc = "将剧集在看、看完状态同步到豆瓣书影音档案"
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
@@ -70,19 +69,39 @@ class DouBanWatching(_PluginBase):
             if episode_id < 2 and event_info.item_type == "TV":
                 logger.info(f"剧集第一集的活动不同步到豆瓣档案，跳过")
                 return
+
+            meta = MetaInfo(title)
+            meta.begin_season = season_id
+            meta.type = MediaType("电视剧" if event_info.item_type == "TV" else "电影")
+            # 识别媒体信息
+            mediainfo: MediaInfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
+                                                        cache=True)
+            if not mediainfo:
+                logger.warn(f'标题：{title}，tmdbid：{tmdb_id}，未识别到媒体信息')
+            # 对于电视剧，获取当前季的总集数
+            episodes = mediainfo.seasons.get(season_id) or []
+
             # 带上第x季
             title = DouBanWatching.format_title(title, season_id)
-            if processed_items.get(title):
+
+            if len(episodes) == episode_id:
+                status = "collect"
+                logger.info(f"当前播放 {title} 第{episode_id}集 为最后一集，标记为看过")
+            else:
+                status = "do"
+
+            # 同步过在看，且不是最后一集
+            if processed_items.get(title) and len(episodes) != episode_id:
                 logger.info(f"{title} 已同步到在看，不处理")
                 return
 
-            logger.info(f"开始尝试获取 {title} 豆瓣subject_id")
+            logger.info(f"开始尝试获取 {title} 豆瓣id")
 
             doubanHelper = DoubanHelper()
             subject_name, subject_id = doubanHelper.get_subject_id(title=title)
             logger.info(f"查询：{title} => 匹配豆瓣：{subject_name} https://movie.douban.com/subject/{subject_id}")
             if subject_id:
-                ret = doubanHelper.set_watching_status(subject_id=subject_id, private=self._private)
+                ret = doubanHelper.set_watching_status(subject_id=subject_id, status=status, private=self._private)
                 if ret:
                     processed_items[f"{title}"] = subject_id
                     self.save_data("processed", processed_items)
