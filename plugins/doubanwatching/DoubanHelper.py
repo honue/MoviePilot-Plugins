@@ -2,6 +2,7 @@ import re
 from typing import List, Tuple
 from urllib.parse import unquote
 
+import requests
 from bs4 import BeautifulSoup
 from http.cookies import SimpleCookie
 from app.core.config import settings
@@ -19,8 +20,8 @@ class DoubanHelper:
         if cookie_dict is None:
             logger.error(msg)
         self.cookies = cookie_dict.get("douban.com")
-        self.cookies = SimpleCookie(self.cookies)
-        self.cookies = {k: v.value for k, v in self.cookies.items()}
+        self.cookies = {k: v.value for k, v in SimpleCookie(self.cookies).items()}
+        self.cookies.pop("__utmz")
         self.ck = self.cookies['ck']
 
         if not cookie_dict:
@@ -87,7 +88,7 @@ class DoubanHelper:
         self.headers["Referer"] = f"https://movie.douban.com/subject/{subject_id}/"
         self.headers["Origin"] = "https://movie.douban.com"
         self.headers["Host"] = "movie.douban.com"
-        self.headers["Cookie"] = self.cookies
+        self.headers["Cookie"] = ";".join([f"{key}={value}" for key, value in self.cookies.items()])
         data_json = {
             "ck": self.ck,
             "interest": "do",
@@ -99,11 +100,12 @@ class DoubanHelper:
         if private:
             data_json["private"] = "on"
         data_json["interest"] = status
-        response = RequestUtils(headers=self.headers, timeout=10).post_res(
+        response = requests.post(
             url=f"https://movie.douban.com/j/subject/{subject_id}/interest",
+            headers=self.headers,
             data=data_json)
         if not response:
-            logger.error(f"{response} ck:{self.ck} cookie:{self.cookies}")
+            logger.error(f"ck:{self.ck} cookie:{self.cookies}")
             return False
         if response.status_code == 200:
             logger.debug(response.text)
