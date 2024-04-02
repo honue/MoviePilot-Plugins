@@ -20,7 +20,9 @@ class DoubanHelper:
             cookie_dict, msg = self.cookiecloud.download()
             if cookie_dict is None:
                 logger.error(f"获取cookiecloud数据错误 {msg}")
-            self.cookies = user_cookie if user_cookie else cookie_dict.get("douban.com")
+            self.cookies = cookie_dict.get("douban.com")
+        else:
+            self.cookies = user_cookie
         self.cookies = {k: v.value for k, v in SimpleCookie(self.cookies).items()}
         if self.cookies.get('__utmz'):
             self.cookies.pop("__utmz")
