@@ -14,21 +14,21 @@ from app.utils.http import RequestUtils
 
 class DoubanHelper:
 
-    def __init__(self):
-        self.cookiecloud = CookieCloudHelper()
-        cookie_dict, msg = self.cookiecloud.download()
-        if cookie_dict is None:
-            logger.error(msg)
-        self.cookies = cookie_dict.get("douban.com")
+    def __init__(self, user_cookie: str = None):
+        if not user_cookie:
+            self.cookiecloud = CookieCloudHelper()
+            cookie_dict, msg = self.cookiecloud.download()
+            if cookie_dict is None:
+                logger.error(f"获取cookiecloud数据错误 {msg}")
+            self.cookies = user_cookie if user_cookie else cookie_dict.get("douban.com")
         self.cookies = {k: v.value for k, v in SimpleCookie(self.cookies).items()}
-        self.cookies.pop("__utmz")
-        self.ck = self.cookies['ck']
-
-        if not cookie_dict:
-            logger.error(f"获取cookiecloud数据错误 {msg}")
+        if self.cookies.get('__utmz'):
+            self.cookies.pop("__utmz")
+        self.ck = self.cookies.get('ck') or ""
+        logger.debug(f"ck:{self.ck} cookie:{self.cookies}")
 
         if not self.cookies or not self.ck:
-            logger.error(f"豆瓣cookie错误 ck:{self.ck} cookies:{self.cookies}")
+            logger.error(f"豆瓣cookie错误 ck:{self.ck if self.ck else 'cookie提取ck获取失败'} cookies:{self.cookies}")
         self.headers = {
             'User-Agent': settings.USER_AGENT,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -105,7 +105,6 @@ class DoubanHelper:
             headers=self.headers,
             data=data_json)
         if not response:
-            logger.error(f"ck:{self.ck} cookie:{self.cookies}")
             return False
         if response.status_code == 200:
             logger.debug(response.text)

@@ -18,7 +18,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.4"
+    plugin_version = "1.5"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -36,11 +36,14 @@ class DouBanWatching(_PluginBase):
     _user = ""
     _exclude = ""
 
+    _cookie = ""
+
     def init_plugin(self, config: dict = None):
         self._enable = config.get("enable") if config.get("enable") is not None else False
         self._private = config.get("private") if config.get("private") is not None else True
         self._user = config.get("user") or ""
         self._exclude = config.get("exclude") or ""
+        self._cookie = config.get("cookie") or ""
 
     @eventmanager.register(EventType.WebhookMessage)
     def hook(self, event: Event):
@@ -75,7 +78,7 @@ class DouBanWatching(_PluginBase):
             meta.type = MediaType("电视剧" if event_info.item_type == "TV" else "电影")
             # 识别媒体信息
             mediainfo: MediaInfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
-                                                        cache=True)
+                                                                cache=True)
             if not mediainfo:
                 logger.warn(f'标题：{title}，tmdbid：{tmdb_id}，未识别到媒体信息')
             # 对于电视剧，获取当前季的总集数
@@ -97,7 +100,7 @@ class DouBanWatching(_PluginBase):
 
             logger.info(f"开始尝试获取 {title} 豆瓣id")
 
-            doubanHelper = DoubanHelper()
+            doubanHelper = DoubanHelper(user_cookie=self._cookie)
             subject_name, subject_id = doubanHelper.get_subject_id(title=title)
             logger.info(f"查询：{title} => 匹配豆瓣：{subject_name} https://movie.douban.com/subject/{subject_id}")
             if subject_id:
@@ -201,6 +204,28 @@ class DouBanWatching(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
+                                    'md': 12
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'cookie',
+                                            'label': '豆瓣cookie',
+                                            'placeholder': '建议自己F12填，留空则每次从cookiecloud获取，强烈建议手动填写',
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
                                 },
                                 'content': [
                                     {
@@ -221,7 +246,8 @@ class DouBanWatching(_PluginBase):
             "enable": False,
             "private": True,
             "user": '',
-            "exclude": ''
+            "exclude": '',
+            "cookie": ""
         }
 
     @staticmethod
