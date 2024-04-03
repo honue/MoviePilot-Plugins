@@ -70,7 +70,7 @@ class DouBanWatching(_PluginBase):
             season_id, episode_id = map(int, [event_info.season_id, event_info.episode_id])
             logger.info(f"开始播放 {title} 第{season_id}季 第{episode_id}集")
             if episode_id < 2 and event_info.item_type == "TV":
-                logger.info(f"剧集第一集的活动不同步到豆瓣档案，跳过")
+                logger.info(f"剧集第1集的活动不同步到豆瓣档案，跳过")
                 return
 
             meta = MetaInfo(title)
@@ -78,9 +78,12 @@ class DouBanWatching(_PluginBase):
             meta.type = MediaType("电视剧" if event_info.item_type == "TV" else "电影")
             # 识别媒体信息
             mediainfo: MediaInfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
+                                                                tmdbid=tmdb_id,
                                                                 cache=True)
             if not mediainfo:
-                logger.warn(f'标题：{title}，tmdbid：{tmdb_id}，未识别到媒体信息')
+                logger.warn(f'标题：{title}，tmdbid：{tmdb_id}，指定tmdbid未识别到媒体信息，尝试仅使用标题识别')
+                mediainfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
+                                                                    cache=True)
             # 对于电视剧，获取当前季的总集数
             episodes = mediainfo.seasons.get(season_id) or []
 
@@ -95,7 +98,7 @@ class DouBanWatching(_PluginBase):
 
             # 同步过在看，且不是最后一集
             if processed_items.get(title) and len(episodes) != episode_id:
-                logger.info(f"{title} 已同步到在看，不处理")
+                logger.info(f"{title} 已同步到豆瓣在看，不处理")
                 return
 
             logger.info(f"开始尝试获取 {title} 豆瓣id")
