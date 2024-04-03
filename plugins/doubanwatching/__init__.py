@@ -14,11 +14,11 @@ class DouBanWatching(_PluginBase):
     # 插件名称
     plugin_name = "豆瓣书影音档案"
     # 插件描述
-    plugin_desc = "将剧集在看、看完状态同步到豆瓣书影音档案"
+    plugin_desc = "将剧集电影的在看、看完状态同步到豆瓣书影音档案"
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.5"
+    plugin_version = "1.6"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -46,7 +46,7 @@ class DouBanWatching(_PluginBase):
         self._cookie = config.get("cookie") or ""
 
     @eventmanager.register(EventType.WebhookMessage)
-    def hook(self, event: Event):
+    def sync_log(self, event: Event):
         event_info: WebhookEventInfo = event.event_data
         # 只判断开始播放的TV剧集是不是anime 调试加入暂停
         play_start = "playback.start|media.play|PlaybackStart".split('|')
@@ -63,51 +63,62 @@ class DouBanWatching(_PluginBase):
                 event='playback.pause' channel='emby' item_type='TV' item_name='咒术回战 S1E47 关门' item_id='22646' item_path='/media/cartoon/动漫/咒术回战 (2020)/Season 1/咒术回战 - S01E47 - 第 47 集.mkv' season_id=1 episode_id=47 tmdb_id=None overview='渋谷事変の最終局面に呪術師が集うなかで、脹相は夏油の亡骸に寄生する“黒幕”の正体に気付く。そして、絶体絶命の危機に現れた特級術師・九十九由基。九十九と“黒幕”がそれぞれ語る人類の未来（ネクストステージ...' percentage=2.5705228512861966 ip='127.0.0.1' device_name='Chrome Windows' client='Emby Web' user_name='honue' image_url=None item_favorite=None save_reason=None item_isvirtual=None media_type='Episode'
             """
             logger.info(" ")
-            # 标题
-            title = event_info.item_name.split(' ')[0]
-            tmdb_id = event_info.tmdb_id
-            # 季 集
-            season_id, episode_id = map(int, [event_info.season_id, event_info.episode_id])
-            logger.info(f"开始播放 {title} 第{season_id}季 第{episode_id}集")
-            if episode_id < 2 and event_info.item_type == "TV":
-                logger.info(f"剧集第1集的活动不同步到豆瓣档案，跳过")
-                return
+            # 处理电视剧
+            if event_info.item_type == "TV":
+                # 标题
+                index = event_info.item_name.index(" S")
+                title = event_info.item_name[:index]
+                tmdb_id = event_info.tmdb_id
+                # 季 集
+                season_id, episode_id = map(int, [event_info.season_id, event_info.episode_id])
+                logger.info(f"开始播放 {title} 第{season_id}季 第{episode_id}集")
+                if episode_id < 2 and event_info.item_type == "TV":
+                    logger.info(f"剧集第1集的活动不同步到豆瓣档案，跳过")
+                    return
 
-            meta = MetaInfo(title)
-            meta.begin_season = season_id
-            meta.type = MediaType("电视剧" if event_info.item_type == "TV" else "电影")
-            # 识别媒体信息
-            mediainfo: MediaInfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
-                                                                tmdbid=tmdb_id,
-                                                                cache=True)
-            if not mediainfo:
-                logger.warn(f'标题：{title}，tmdbid：{tmdb_id}，指定tmdbid未识别到媒体信息，尝试仅使用标题识别')
-                mediainfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
+                meta = MetaInfo(title)
+                meta.begin_season = season_id
+                meta.type = MediaType("电视剧" if event_info.item_type == "TV" else "电影")
+                # 识别媒体信息
+                mediainfo: MediaInfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
+                                                                    tmdbid=tmdb_id,
                                                                     cache=True)
-            # 对于电视剧，获取当前季的总集数
-            episodes = mediainfo.seasons.get(season_id) or []
+                if not mediainfo:
+                    logger.warn(f'标题：{title}，tmdbid：{tmdb_id}，指定tmdbid未识别到媒体信息，尝试仅使用标题识别')
+                    mediainfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
+                                                             cache=True)
+                # 对于电视剧，获取当前季的总集数
+                episodes = mediainfo.seasons.get(season_id) or []
 
-            # 带上第x季
-            title = DouBanWatching.format_title(title, season_id)
+                # 带上第x季
+                title = DouBanWatching.format_title(title, season_id)
 
-            if len(episodes) == episode_id:
-                status = "collect"
-                logger.info(f"{title} 第{episode_id}集 为最后一集，标记为看过")
+                if len(episodes) == episode_id:
+                    status = "collect"
+                    logger.info(f"{title} 第{episode_id}集 为最后一集，标记为看过")
+                else:
+                    status = "do"
+
+                # 同步过在看，且不是最后一集
+                if processed_items.get(title) and len(episodes) != episode_id:
+                    logger.info(f"{title} 已同步到豆瓣在看，不处理")
+                    return
+            # 处理电影
             else:
-                status = "do"
+                title = event_info.item_name
+                status = "collect"
 
-            # 同步过在看，且不是最后一集
-            if processed_items.get(title) and len(episodes) != episode_id:
-                logger.info(f"{title} 已同步到豆瓣在看，不处理")
-                return
+                if processed_items.get(title):
+                    logger.info(f"{title} 已同步到豆瓣在看，不处理")
+                    return
 
             logger.info(f"开始尝试获取 {title} 豆瓣id")
 
-            doubanHelper = DoubanHelper(user_cookie=self._cookie)
-            subject_name, subject_id = doubanHelper.get_subject_id(title=title)
+            douban_helper = DoubanHelper(user_cookie=self._cookie)
+            subject_name, subject_id = douban_helper.get_subject_id(title=title)
             logger.info(f"查询：{title} => 匹配豆瓣：{subject_name} https://movie.douban.com/subject/{subject_id}")
             if subject_id:
-                ret = doubanHelper.set_watching_status(subject_id=subject_id, status=status, private=self._private)
+                ret = douban_helper.set_watching_status(subject_id=subject_id, status=status, private=self._private)
                 if ret:
                     processed_items[f"{title}"] = subject_id
                     self.save_data("processed", processed_items)
