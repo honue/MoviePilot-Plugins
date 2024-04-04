@@ -88,6 +88,7 @@ class DouBanWatching(_PluginBase):
                                                                     cache=True)
                 if not mediainfo:
                     logger.warn(f'标题：{title}，tmdbid：{tmdb_id}，指定tmdbid未识别到媒体信息，尝试仅使用标题识别')
+                    meta.tmdbid = None
                     mediainfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
                                                              cache=False)
                 # 对于电视剧，获取当前季的总集数
