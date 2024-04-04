@@ -118,6 +118,7 @@ def include_keyword(path: str, keywords: str) -> dict:
         if keyword in path:
             flag = True
             msg = keyword
+            break
     if flag:
         return {'ret': True, 'msg': msg}
     else:
