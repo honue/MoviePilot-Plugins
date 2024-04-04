@@ -18,7 +18,7 @@
   "DouBanWatching": {
     "name": "豆瓣书影音档案",
     "description": "将剧集在看、看完状态同步到豆瓣书影音档案",
-    "version": "1.6",
+    "version": "1.7",
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/douban.png",
     "author": "honue",
     "level": 1

@@ -18,7 +18,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.6"
+    plugin_version = "1.7"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -32,6 +32,7 @@ class DouBanWatching(_PluginBase):
 
     _enable = False
     _private = True
+    _first = True
 
     _user = ""
     _exclude = ""
@@ -41,6 +42,8 @@ class DouBanWatching(_PluginBase):
     def init_plugin(self, config: dict = None):
         self._enable = config.get("enable") if config.get("enable") is not None else False
         self._private = config.get("private") if config.get("private") is not None else True
+        self._first = config.get("first") if config.get("first") is not None else True
+
         self._user = config.get("user") or ""
         self._exclude = config.get("exclude") or ""
         self._cookie = config.get("cookie") or ""
@@ -72,7 +75,7 @@ class DouBanWatching(_PluginBase):
                 # 季 集
                 season_id, episode_id = map(int, [event_info.season_id, event_info.episode_id])
                 logger.info(f"开始播放 {title} 第{season_id}季 第{episode_id}集")
-                if episode_id < 2 and event_info.item_type == "TV":
+                if episode_id < 2 and event_info.item_type == "TV" and self._first:
                     logger.info(f"剧集第1集的活动不同步到豆瓣档案，跳过")
                     return
 
@@ -86,7 +89,7 @@ class DouBanWatching(_PluginBase):
                 if not mediainfo:
                     logger.warn(f'标题：{title}，tmdbid：{tmdb_id}，指定tmdbid未识别到媒体信息，尝试仅使用标题识别')
                     mediainfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
-                                                             cache=True)
+                                                             cache=False)
                 # 对于电视剧，获取当前季的总集数
                 episodes = mediainfo.seasons.get(season_id) or []
 
@@ -143,7 +146,7 @@ class DouBanWatching(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
+                                    'md': 4
                                 },
                                 'content': [
                                     {
@@ -158,7 +161,7 @@ class DouBanWatching(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
+                                    'md': 4
                                 },
                                 'content': [
                                     {
@@ -166,6 +169,21 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'model': 'private',
                                             'label': '仅自己可见',
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 4
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'first',
+                                            'label': '不标记第一集',
                                         }
                                     }
                                 ]
@@ -259,6 +277,7 @@ class DouBanWatching(_PluginBase):
         ], {
             "enable": False,
             "private": True,
+            "first": True,
             "user": '',
             "exclude": '',
             "cookie": ""
