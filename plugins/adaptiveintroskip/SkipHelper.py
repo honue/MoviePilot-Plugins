@@ -111,11 +111,17 @@ def get_total_time(item_id):
 
 
 def include_keyword(path: str, keywords: str) -> dict:
-    keyword_list: list = keywords.split(',')
+    keyword_list: list = keywords.split(',') if keywords else []
+    flag = False
+    msg = ""
     for keyword in keyword_list:
-        if keyword not in path:
-            return {'ret': False, 'msg': keyword}
-    return {'ret': True, 'msg': ''}
+        if keyword in path:
+            flag = True
+            msg = keyword
+    if flag:
+        return {'ret': True, 'msg': msg}
+    else:
+        return {'ret': False, 'msg': ''}
 
 
 def exclude_keyword(path: str, keywords: str) -> dict:

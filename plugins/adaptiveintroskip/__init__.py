@@ -59,10 +59,11 @@ class AdaptiveIntroSkip(_PluginBase):
 
         include_ret = include_keyword(event_info.item_path, self._include)
         exclude_ret = exclude_keyword(event_info.item_path, self._exclude)
-        if not include_ret.get('ret') \
-                or not exclude_ret.get('ret'):
-            logger.info(
-                f"受关键词{include_ret.get('msg')}{exclude_ret.get('msg')}限制，{event_info.item_path} 不标记片头片尾")
+        if not include_ret.get('ret') or not exclude_ret.get('ret'):
+            if not include_ret.get('ret'):
+                logger.info(f"{event_info.item_path} 不包含任何关键词 {self._include} 不标记片头片尾")
+            else:
+                logger.info(f"{event_info.item_path} 包含关键词 {exclude_ret.get('msg')} 不标记片头片尾")
             return
 
         logger.debug(event_info)
