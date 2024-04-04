@@ -111,7 +111,7 @@ def get_total_time(item_id):
 
 
 def include_keyword(path: str, keywords: str) -> dict:
-    keyword_list: list = keywords.split(',') if keywords else []
+    keyword_list: list = keywords.split(',')
     flag = False
     msg = ""
     for keyword in keyword_list:
