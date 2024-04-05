@@ -15,7 +15,7 @@ class FollowNotify(_PluginBase):
     # 插件名称
     plugin_name = "收藏更新通知"
     # 插件描述
-    plugin_desc = "在Emby上收藏剧集，当有新集更新时发送通知。适合针对性的获取剧集更新通知、榜单订阅时有不看的剧集不想收到更新通知。"
+    plugin_desc = "收藏剧集，当有新集更新时发送通知。适合针对性的获取更新通知。"
     # 插件图标
     plugin_icon = "like.jpg"
     # 插件版本
