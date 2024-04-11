@@ -18,7 +18,7 @@ class ShortCut(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/shortcut.jpg"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -41,7 +41,7 @@ class ShortCut(_PluginBase):
     def init_plugin(self, config: dict = None):
         self._enable = config.get("enable") if config.get("enable") else False
         self._plugin_key = config.get("plugin_key") if config.get("plugin_key") else settings.API_TOKEN
-        self._num = config.get("num") if config.get("num") else 3
+        self._num = int(config.get("num")) if config.get("num") else 3
 
         self.downloadchain = DownloadChain()
         self.subscribechain = SubscribeChain()
@@ -56,7 +56,12 @@ class ShortCut(_PluginBase):
             return []
         _, medias = self.mediachain.search(title=title)
         if medias:
-            return [media.to_dict() for media in medias[:self._num]]
+            ret = []
+            for media in medias[:self._num]:
+                # 降低图片质量
+                media.poster_path.replace("/original/", "/w200/")
+                ret.append(media)
+            return ret
         logger.info(f"{title} 没有找到结果")
         return []
 
@@ -193,7 +198,7 @@ class ShortCut(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '2024/4/11 快捷指令：https://www.icloud.com/shortcuts/31a8dfdb29f84763ac5a6211b3971f28'
+                                            'text': '2024/4/11 快捷指令：https://www.icloud.com/shortcuts/316744e16f9648339963e8ef913fa028'
                                         }
                                     }
                                 ]
