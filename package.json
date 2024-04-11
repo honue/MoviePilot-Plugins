@@ -23,6 +23,14 @@
     "author": "honue",
     "level": 1
   },
+  "ShortCut": {
+    "name": "快捷指令",
+    "description": "IOS快捷指令，快速选片添加订阅",
+    "version": "1.0",
+    "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/shortcut.jpg",
+    "author": "honue",
+    "level": 1
+  },
   "BangumiRank": {
     "name": "Bangumi榜单订阅",
     "description": "Bangumi成员关注动画榜，时下流行番剧订阅，个人想看订阅",
