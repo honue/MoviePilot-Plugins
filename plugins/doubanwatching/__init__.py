@@ -51,7 +51,6 @@ class DouBanWatching(_PluginBase):
     @eventmanager.register(EventType.WebhookMessage)
     def sync_log(self, event: Event):
         event_info: WebhookEventInfo = event.event_data
-        # 只判断开始播放的TV剧集是不是anime 调试加入暂停
         play_start = "playback.start|media.play|PlaybackStart".split('|')
         # 根据媒体文件路径判断是否要同步到影音档案
         path = event_info.item_path
@@ -266,7 +265,7 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '需要开启媒体服务器的webhook，另需要浏览器登录豆瓣，将豆瓣的cookie同步到cookiecloud，剧集第一集的活动不会同步到档案'
+                                            'text': '需要开启媒体服务器的webhook，需要浏览器登录豆瓣，将豆瓣的cookie同步到cookiecloud，强烈建议手动填写cookie'
                                         }
                                     }
                                 ]
