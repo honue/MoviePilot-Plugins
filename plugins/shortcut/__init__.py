@@ -200,7 +200,7 @@ class ShortCut(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '2024/4/12 快捷指令：https://www.icloud.com/shortcuts/fdfff20c25284d19bb8976f9f2f8db65'
+                                            'text': '安装完插件需要重启mp，2024/4/12 快捷指令：https://www.icloud.com/shortcuts/fdfff20c25284d19bb8976f9f2f8db65'
                                         }
                                     }
                                 ]
