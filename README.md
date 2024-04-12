@@ -35,6 +35,11 @@ https://github.com/honue/MoviePilot-Plugins/
 - 豆瓣书影音档案
 
 > 将在看的剧集自动同步到[豆瓣书影音档案](https://www.douban.com/note/745865495)
+
+- 快捷指令订阅
+
+> IOS快捷指令，快速选片添加订阅
+
 ### 如果对你有所帮助⭐
 
 [![Stargazers over time](https://starchart.cc/honue/MoviePilot-Plugins.svg?background=%23FFFFFF&axis=%23333333&line=%2363beff)](https://starchart.cc/honue/MoviePilot-Plugins)

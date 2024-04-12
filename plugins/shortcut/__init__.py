@@ -7,7 +7,7 @@ from app.core.metainfo import MetaInfo
 from app.plugins import _PluginBase
 from app.core.config import settings
 from app.log import logger
-from app.schemas import MediaInfo
+from app.schemas import MediaInfo, MediaType
 
 
 class ShortCut(_PluginBase):
@@ -18,7 +18,7 @@ class ShortCut(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/shortcut.jpg"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -65,7 +65,7 @@ class ShortCut(_PluginBase):
         logger.info(f"{title} 没有找到结果")
         return []
 
-    def subscribe(self, title: str, tmdbid: str, plugin_key: str = "") -> Any:
+    def subscribe(self, title: str, tmdbid: str, type: str = "电视剧", plugin_key: str = "") -> Any:
         """
         添加订阅订阅
         """
@@ -76,7 +76,9 @@ class ShortCut(_PluginBase):
         # 元数据
         meta = MetaInfo(title=title)
         meta.tmdbid = tmdbid
-        mediainfo: MediaInfo = self.chain.recognize_media(meta=meta, tmdbid=tmdbid)
+        logger.info(type)
+        mediainfo: MediaInfo = self.chain.recognize_media(meta=meta, tmdbid=tmdbid,
+                                                          mtype=MediaType.TV if type == "电视剧" else MediaType.MOVIE)
         if not mediainfo:
             msg = f'未识别到媒体信息，标题：{title}，tmdb_id：{tmdbid}'
             logger.warn(msg)
@@ -102,7 +104,7 @@ class ShortCut(_PluginBase):
                                            exist_ok=True,
                                            username="快捷指令")
         if not msg:
-            return f"{title} 订阅成功"
+            return f"{mediainfo.title_year} 订阅成功"
         else:
             return msg
 
@@ -198,7 +200,7 @@ class ShortCut(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '2024/4/11 快捷指令：https://www.icloud.com/shortcuts/316744e16f9648339963e8ef913fa028'
+                                            'text': '2024/4/12 快捷指令：https://www.icloud.com/shortcuts/fdfff20c25284d19bb8976f9f2f8db65'
                                         }
                                     }
                                 ]
