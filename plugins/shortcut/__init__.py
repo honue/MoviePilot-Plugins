@@ -285,7 +285,7 @@ class ShortCut(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '2024/4/13 快捷指令：https://www.icloud.com/shortcuts/2601ca395e824fadaf13cb158044fedf'
+                                            'text': '安装完插件需要重启mp，2024/4/13 快捷指令：https://www.icloud.com/shortcuts/2601ca395e824fadaf13cb158044fedf'
                                         }
                                     }
                                 ]
