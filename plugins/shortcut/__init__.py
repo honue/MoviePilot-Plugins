@@ -22,7 +22,7 @@ class ShortCut(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/shortcut.jpg"
     # 插件版本
-    plugin_version = "1.3"
+    plugin_version = "1.4"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -149,7 +149,7 @@ class ShortCut(_PluginBase):
         else:
             self.torrents_list = [torrent.to_dict() for torrent in torrents]
 
-        return self.torrents_list
+        return self.torrents_list[:50]
 
     def download(self, idx: int, plugin_key: str = None):
         if self._plugin_key != plugin_key:
@@ -285,7 +285,37 @@ class ShortCut(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '安装完插件需要重启mp，2024/4/13 快捷指令：https://www.icloud.com/shortcuts/2601ca395e824fadaf13cb158044fedf'
+                                            'text': '更新于 2024/4/13 安装完插件需要重启mp'
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': '包含订阅和下载，快捷指令：https://www.icloud.com/shortcuts/e955f92458c6490b83f05f08ac9a6f7d'
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': '只有订阅功能，快捷指令：https://www.icloud.com/shortcuts/fdfff20c25284d19bb8976f9f2f8db65'
                                         }
                                     }
                                 ]
