@@ -26,7 +26,10 @@
   "ShortCut": {
     "name": "快捷指令",
     "description": "IOS快捷指令，快速选片添加订阅",
-    "version": "1.2",
+    "version": "1.3",
+    "history": {
+      "v1.3": "增加选择种子下载功能，ios快捷指令需要重新安装配置"
+    },
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/shortcut.jpg",
     "author": "honue",
     "level": 1

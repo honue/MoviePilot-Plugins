@@ -1,13 +1,17 @@
 from typing import List, Tuple, Dict, Any
 
+from cachetools import cached, TTLCache
+
 from app.chain.download import DownloadChain
 from app.chain.media import MediaChain
+from app.chain.search import SearchChain
 from app.chain.subscribe import SubscribeChain
-from app.core.metainfo import MetaInfo
-from app.plugins import _PluginBase
 from app.core.config import settings
+from app.core.metainfo import MetaInfo
+from app.core.context import MediaInfo, Context, TorrentInfo
 from app.log import logger
-from app.schemas import MediaInfo, MediaType
+from app.plugins import _PluginBase
+from app.schemas import MediaType
 
 
 class ShortCut(_PluginBase):
@@ -18,7 +22,7 @@ class ShortCut(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/shortcut.jpg"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.3"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -37,6 +41,9 @@ class ShortCut(_PluginBase):
     downloadchain: DownloadChain = None
     subscribechain: SubscribeChain = None
     mediachain: MediaChain = None
+    searchchain: SearchChain = None
+
+    torrents_list = []
 
     def init_plugin(self, config: dict = None):
         self._enable = config.get("enable") if config.get("enable") else False
@@ -46,6 +53,8 @@ class ShortCut(_PluginBase):
         self.downloadchain = DownloadChain()
         self.subscribechain = SubscribeChain()
         self.mediachain = MediaChain()
+        self.searchchain = SearchChain()
+        self.torrents_list = []
 
     def search(self, title: str, plugin_key: str) -> Any:
         """
@@ -76,9 +85,8 @@ class ShortCut(_PluginBase):
         # 元数据
         meta = MetaInfo(title=title)
         meta.tmdbid = tmdbid
-        logger.info(type)
         mediainfo: MediaInfo = self.chain.recognize_media(meta=meta, tmdbid=tmdbid,
-                                                          mtype=MediaType.TV if type == "电视剧" else MediaType.MOVIE)
+                                                          mtype=MediaType(type))
         if not mediainfo:
             msg = f'未识别到媒体信息，标题：{title}，tmdb_id：{tmdbid}'
             logger.warn(msg)
@@ -108,6 +116,71 @@ class ShortCut(_PluginBase):
         else:
             return msg
 
+    @cached(TTLCache(maxsize=100, ttl=120))
+    def torrents(self, tmdbid: int, type: str = None, area: str = "title",
+                 season: str = None, plugin_key: str = None):
+        """
+        根据TMDBID精确搜索站点资源
+        """
+        if self._plugin_key != plugin_key:
+            logger.error(f"plugin_key错误：{plugin_key}")
+            return []
+        if type:
+            type = MediaType(type)
+        if season:
+            season = int(season)
+        self.torrents_list = []
+
+        if settings.RECOGNIZE_SOURCE == "douban":
+            # 通过TMDBID识别豆瓣ID
+            doubaninfo = self.mediachain.get_doubaninfo_by_tmdbid(tmdbid=tmdbid, mtype=type)
+            if doubaninfo:
+                torrents = self.searchchain.search_by_id(doubanid=doubaninfo.get("id"),
+                                                         mtype=type, area=area, season=season)
+            else:
+                logger.error("未识别到豆瓣媒体信息")
+                return []
+        else:
+            torrents = self.searchchain.search_by_id(tmdbid=tmdbid, mtype=type, area=area, season=season)
+
+        if not torrents:
+            logger.error("未搜索到任何资源")
+            return []
+        else:
+            self.torrents_list = [torrent.to_dict() for torrent in torrents]
+
+        return self.torrents_list
+
+    def download(self, idx: int, plugin_key: str = None):
+        if self._plugin_key != plugin_key:
+            logger.error(f"plugin_key错误：{plugin_key}")
+            return f"plugin_key错误：{plugin_key}"
+
+        idx = idx - 1
+        if idx > len(self.torrents_list):
+            return "超出范围，添加失败"
+        selected_info: dict = self.torrents_list[idx]
+        # 媒体信息
+        mediainfo = MediaInfo()
+        mediainfo.from_dict(selected_info.get("media_info"))
+        # 种子信息
+        torrentinfo = TorrentInfo()
+        torrentinfo.from_dict(selected_info.get("torrent_info"))
+        # 元数据
+        metainfo = MetaInfo(title=torrentinfo.title, subtitle=torrentinfo.description)
+
+        # 上下文
+        context = Context(
+            meta_info=metainfo,
+            media_info=mediainfo,
+            torrent_info=torrentinfo
+        )
+        did = self.downloadchain.download_single(context=context, username="快捷指令")
+        if not did:
+            return f"添加下载失败"
+        else:
+            return f"{mediainfo.title_year} 添加下载成功"
+
     def get_api(self) -> List[Dict[str, Any]]:
         return [
             {
@@ -119,9 +192,21 @@ class ShortCut(_PluginBase):
             }, {
                 "path": "/subscribe",
                 "endpoint": self.subscribe,
-                "methods": ["GET", "POST"],
+                "methods": ["GET"],
                 "summary": "添加订阅",
                 "description": "添加订阅",
+            }, {
+                "path": "/torrents",
+                "endpoint": self.torrents,
+                "methods": ["GET"],
+                "summary": "搜索种子",
+                "description": "搜索种子",
+            }, {
+                "path": "/download",
+                "endpoint": self.download,
+                "methods": ["GET"],
+                "summary": "下载任务",
+                "description": "下载任务",
             }
         ]
 
@@ -200,7 +285,7 @@ class ShortCut(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '安装完插件需要重启mp，2024/4/12 快捷指令：https://www.icloud.com/shortcuts/fdfff20c25284d19bb8976f9f2f8db65'
+                                            'text': '2024/4/13 快捷指令：https://www.icloud.com/shortcuts/2601ca395e824fadaf13cb158044fedf'
                                         }
                                     }
                                 ]
