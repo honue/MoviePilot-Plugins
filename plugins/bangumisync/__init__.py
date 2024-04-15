@@ -18,7 +18,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.3"
+    plugin_version = "1.4"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -129,7 +129,8 @@ class BangumiSync(_PluginBase):
         """
         通过路径关键词来确定是不是anime媒体库
         """
-        path_keyword = "cartoon,动漫,动画,ani,anime,新番,番剧,特摄"
+        path_keyword = "cartoon,动漫,动画,ani,anime,新番,番剧,特摄,bangumi,ova,映画,国漫,日漫"
+        path = path.lower()  # Convert path to lowercase to make the check case-insensitive
         for keyword in path_keyword.split(','):
             if path.count(keyword):
                 return True
