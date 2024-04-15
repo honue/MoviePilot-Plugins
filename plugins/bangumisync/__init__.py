@@ -130,7 +130,7 @@ class BangumiSync(_PluginBase):
         通过路径关键词来确定是不是anime媒体库
         """
         path_keyword = "cartoon,动漫,动画,ani,anime,新番,番剧,特摄,bangumi,ova,映画,国漫,日漫"
-		path = path.lower()  # Convert path to lowercase to make the check case-insensitive
+        path = path.lower()  # Convert path to lowercase to make the check case-insensitive
         for keyword in path_keyword.split(','):
             if path.count(keyword):
                 return True
