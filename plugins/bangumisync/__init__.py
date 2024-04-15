@@ -8,7 +8,7 @@ from app.schemas import WebhookEventInfo, MediaInfo
 from app.schemas.types import EventType, MediaType
 from app.utils.http import RequestUtils
 from cachetools import cached, TTLCache
-
+import json
 
 class BangumiSync(_PluginBase):
     # 插件名称
@@ -18,7 +18,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.4"
+    plugin_version = "1.5"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -34,6 +34,7 @@ class BangumiSync(_PluginBase):
 
     _enable = True
     _user = None
+    _bgm_uid = None
     _token = None
 
     def init_plugin(self, config: dict = None):
@@ -103,7 +104,6 @@ class BangumiSync(_PluginBase):
     def sync_watching_status(self, subject_id):
         post_data = {
             "type": 3,
-            "rate": 10,
             "comment": "",
             "private": False,
             "tags": [
@@ -113,16 +113,28 @@ class BangumiSync(_PluginBase):
         headers = {"Authorization": f"Bearer {self._token}",
                    "User-Agent": BangumiSync.UA,
                    "content-type": "application/json"}
-        resp = RequestUtils(proxies=settings.PROXY,
-                            headers=headers
-                            ) \
-            .post(url=f"https://api.bgm.tv/v0/users/-/collections/{subject_id}",
-                  json=post_data)
+        request = RequestUtils(proxies=settings.PROXY, headers=headers)
+        
+        # 获取uid
+        if not self._bgm_uid:
+            resp = request.get(url="https://api.bgm.tv/v0/me")
+            self._bgm_uid = json.loads(resp).get("id")
+            logger.info(f"获取到 bgm_uid {self._bgm_uid}")
+        
+        # 已经在看或看过，避免刷屏
+        resp = request.get(url=f"https://api.bgm.tv/v0/users/{self._bgm_uid}/collections/{subject_id}")
+        resp = json.loads(resp)
+        if "type" in resp and resp["type"] in [2, 3]:
+            logger.info("状态为看过或在看，无需更新在看状态")
+            return
+        
+        # 更新在看状态
+        resp = request.post(url=f"https://api.bgm.tv/v0/users/-/collections/{subject_id}", json=post_data)
         if resp.status_code in [202, 204]:
             logger.info("在看状态更新成功")
         else:
             logger.warning(resp.text)
-            logger.warning(f"在看状态更新失败")
+            logger.warning("在看状态更新失败")
 
     @staticmethod
     def is_anime(path):
