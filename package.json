@@ -58,7 +58,7 @@
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg",
     "author": "honue",
     "level": 2,
-	"history": {
+    "history": {
       "v1.5": "不再同步已经在看或看过的番剧，避免刷屏；更新时不再直接给出10分，避免覆盖评分",
       "v1.4": "增加文件名规则；避免大小写导致的番剧无法匹配"
     }
