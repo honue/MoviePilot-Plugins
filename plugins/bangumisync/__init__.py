@@ -115,7 +115,8 @@ class BangumiSync(_PluginBase):
                    "content-type": "application/json"}
         request = requests.Session()
         request.headers.update(headers)
-        request.proxies.update(settings.PROXY)
+        if settings.PROXY:
+            request.proxies.update(settings.PROXY)
         
         # 获取uid
         if not self._bgm_uid:
