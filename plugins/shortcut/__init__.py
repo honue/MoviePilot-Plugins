@@ -22,7 +22,7 @@ class ShortCut(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/shortcut.jpg"
     # 插件版本
-    plugin_version = "1.4"
+    plugin_version = "1.5"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -116,7 +116,7 @@ class ShortCut(_PluginBase):
         else:
             return msg
 
-    @cached(TTLCache(maxsize=100, ttl=120))
+    @cached(TTLCache(maxsize=100, ttl=300))
     def torrents(self, tmdbid: int, type: str = None, area: str = "title",
                  season: str = None, plugin_key: str = None):
         """
@@ -285,7 +285,7 @@ class ShortCut(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '更新于 2024/4/13 安装完插件需要重启mp'
+                                            'text': '感谢Nest的想法。更新于 2024/4/25 安装完插件需要重启MoviePilot（1.8.3+） 推荐使用只有订阅功能的快捷指令，按需选择。'
                                         }
                                     }
                                 ]
@@ -300,7 +300,7 @@ class ShortCut(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '包含订阅和下载，快捷指令：https://www.icloud.com/shortcuts/e955f92458c6490b83f05f08ac9a6f7d'
+                                            'text': '包含订阅和下载，快捷指令：https://www.icloud.com/shortcuts/467c61e122814fb3b910701c0ce276cc'
                                         }
                                     }
                                 ]
@@ -315,7 +315,7 @@ class ShortCut(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '只有订阅功能，快捷指令：https://www.icloud.com/shortcuts/fdfff20c25284d19bb8976f9f2f8db65'
+                                            'text': '只有订阅功能，快捷指令：https://www.icloud.com/shortcuts/359d70d2fe554388a2efcdd9929a033b'
                                         }
                                     }
                                 ]
