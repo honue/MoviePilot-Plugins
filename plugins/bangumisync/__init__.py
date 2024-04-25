@@ -8,7 +8,7 @@ from app.schemas import WebhookEventInfo, MediaInfo
 from app.schemas.types import EventType, MediaType
 from app.utils.http import RequestUtils
 from cachetools import cached, TTLCache
-import json
+import requests
 
 class BangumiSync(_PluginBase):
     # 插件名称
@@ -18,7 +18,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.5"
+    plugin_version = "1.6"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -77,7 +77,7 @@ class BangumiSync(_PluginBase):
             logger.info(f"获取 {title} subject_id")
             subject_name, subject_id = self.get_subjectid_by_title(mediainfo.original_title, season_id)
             logger.info(f"{title} => {subject_name} https://bgm.tv/subject/{subject_id}")
-            self.sync_watching_status(subject_id)
+            self.sync_watching_status(subject_id, episode_id)
 
     @staticmethod
     @cached(TTLCache(maxsize=100, ttl=3600))
@@ -101,7 +101,7 @@ class BangumiSync(_PluginBase):
         return data.get('name'), data.get('id')
 
     @cached(TTLCache(maxsize=10, ttl=600))
-    def sync_watching_status(self, subject_id):
+    def sync_watching_status(self, subject_id, episode):
         post_data = {
             "type": 3,
             "comment": "",
@@ -113,28 +113,73 @@ class BangumiSync(_PluginBase):
         headers = {"Authorization": f"Bearer {self._token}",
                    "User-Agent": BangumiSync.UA,
                    "content-type": "application/json"}
-        request = RequestUtils(proxies=settings.PROXY, headers=headers)
+        request = requests.Session()
+        request.headers.update(headers)
+        request.proxies.update(settings.PROXY)
         
         # 获取uid
         if not self._bgm_uid:
             resp = request.get(url="https://api.bgm.tv/v0/me")
-            self._bgm_uid = json.loads(resp).get("id")
+            self._bgm_uid = resp.json().get("id")
             logger.info(f"获取到 bgm_uid {self._bgm_uid}")
         
-        # 已经在看或看过，避免刷屏
+        # 获取合集状态
         resp = request.get(url=f"https://api.bgm.tv/v0/users/{self._bgm_uid}/collections/{subject_id}")
-        resp = json.loads(resp)
+        resp = resp.json()
         if "type" in resp and resp["type"] in [2, 3]:
+            # 已经在看或看过，避免刷屏
             logger.info("状态为看过或在看，无需更新在看状态")
-            return
-        
-        # 更新在看状态
-        resp = request.post(url=f"https://api.bgm.tv/v0/users/-/collections/{subject_id}", json=post_data)
-        if resp.status_code in [202, 204]:
-            logger.info("在看状态更新成功")
         else:
-            logger.warning(resp.text)
-            logger.warning("在看状态更新失败")
+            # 更新在看状态
+            resp = request.post(url=f"https://api.bgm.tv/v0/users/-/collections/{subject_id}", json=post_data)
+            if resp.status_code in [202, 204]:
+                logger.info("在看状态更新成功")
+            else:
+                logger.warning(resp.text)
+                logger.warning("在看状态更新失败")
+        
+        # 获取episode id
+        resp = request.get("https://api.bgm.tv/v0/episodes", params={"subject_id": subject_id})
+        if resp.status_code == 200:
+            logger.info("获取episode info成功")
+        else:
+            logger.warning(f"获取episode info失败, code={resp.status_code}")
+        ep_info = resp.json()["data"]
+
+        found = False
+        for info in ep_info:
+            if info["sort"] == episode and info["name"]:
+                episode_id = info["id"]
+                found = True
+                break
+        
+        if not found:
+            for info in ep_info:
+                if info["ep"] == episode and info["name"]:
+                    episode_id = info["id"]
+                    found = True
+                    break
+        
+        if not found:
+            logger.warning(f"未找到{subject_id}-{episode}，可能因为TMDB和BGM的episode号映射关系不一致")
+            return
+
+        # 点格子
+        url = f"https://api.bgm.tv/v0/users/-/collections/-/episodes/{episode_id}"
+        resp = request.get(url)
+        if resp.status_code == 200:
+            resp = resp.json()
+            if resp["type"] == 2:
+                logger.info("单集已经点过格子了")
+                return
+        else:
+            logger.warning(f"获取单集信息失败, code={resp.status_code}")
+            return
+        resp = request.put(url, json={"type": 2})
+        if resp.status_code == 204:
+            logger.info("单集点格子成功")
+        else:
+            logger.warning(f"单集点格子失败, code={resp.status_code}")
 
     @staticmethod
     def is_anime(path):
@@ -283,4 +328,4 @@ class BangumiSync(_PluginBase):
 if __name__ == "__main__":
     subject_id = BangumiSync.get_subjectid_by_title("葬送的芙莉莲", 1)
     bangumi = BangumiSync()
-    bangumi.sync_watching_status(subject_id)
+    bangumi.sync_watching_status(subject_id, 1)
