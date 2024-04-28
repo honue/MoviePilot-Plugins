@@ -9,6 +9,7 @@ from app.schemas.types import EventType, MediaType
 from app.utils.http import RequestUtils
 from cachetools import cached, TTLCache
 import requests
+import re
 
 class BangumiSync(_PluginBase):
     # 插件名称
@@ -18,7 +19,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.6"
+    plugin_version = "1.7"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -62,20 +63,20 @@ class BangumiSync(_PluginBase):
             """
                 event='playback.pause' channel='emby' item_type='TV' item_name='咒术回战 S1E47 关门' item_id='22646' item_path='/media/cartoon/动漫/咒术回战 (2020)/Season 1/咒术回战 - S01E47 - 第 47 集.mkv' season_id=1 episode_id=47 tmdb_id=None overview='渋谷事変の最終局面に呪術師が集うなかで、脹相は夏油の亡骸に寄生する“黒幕”の正体に気付く。そして、絶体絶命の危機に現れた特級術師・九十九由基。九十九と“黒幕”がそれぞれ語る人類の未来（ネクストステージ...' percentage=2.5705228512861966 ip='127.0.0.1' device_name='Chrome Windows' client='Emby Web' user_name='honue' image_url=None item_favorite=None save_reason=None item_isvirtual=None media_type='Episode'
             """
-            # 标题
-            title = event_info.item_name.split(' ')[0]
+            # 标题，mp 的 tmdb 搜索 api 有点问题，带空格的搜不出来，直接使用 emby 事件的标题
             tmdb_id = event_info.tmdb_id
-            meta = MetaInfo(title)
-            mediainfo: MediaInfo = self.chain.recognize_media(meta=meta, tmdbid=tmdb_id, mtype=MediaType.TV)
+            logger.info(f"匹配播放事件 {event_info.item_name} tmdb id = {tmdb_id}...")
+            match = re.match(r"^(.+)\sS\d+E\d+\s.+", event_info.item_name)
+            if match:
+                title = match.group(1)
+            else:
+                title = event_info.item_name.split(' ')[0]
+
             # 季 集
             season_id, episode_id = map(int, [event_info.season_id, event_info.episode_id])
             logger.info(f"开始播放 {title} 第{season_id}季 第{episode_id}集")
-            # 好像api限制只能修改收藏，即，在看，看完等，共5种状态 同步要通过这个 subject/set/watched 但这个不能使用access_token
-            # 先只同步在看状态吧...
-            # if episode_id > 1:
-            #     return
-            logger.info(f"获取 {title} subject_id")
-            subject_name, subject_id = self.get_subjectid_by_title(mediainfo.original_title, season_id)
+            # mediainfo.original_title 是日文，bgm的日文搜索不太精确，有时会出现莫名其妙的结果
+            subject_name, subject_id = self.get_subjectid_by_title(title, season_id)
             logger.info(f"{title} => {subject_name} https://bgm.tv/subject/{subject_id}")
             self.sync_watching_status(subject_id, episode_id)
 
@@ -85,7 +86,7 @@ class BangumiSync(_PluginBase):
         title = BangumiSync.format_title(title, season)
         post_json = {
             "keyword": title,
-            "sort": "rank",
+            "sort": "match",
             "filter": {
                 "type": [
                     2
@@ -98,7 +99,7 @@ class BangumiSync(_PluginBase):
                            accept_type="application/json"
                            ).post(url=url, json=post_json).json()
         data: dict = ret.get('data')[0]
-        return data.get('name'), data.get('id')
+        return data.get('name_cn'), data.get('id')
 
     @cached(TTLCache(maxsize=10, ttl=600))
     def sync_watching_status(self, subject_id, episode):
