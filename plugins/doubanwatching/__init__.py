@@ -244,7 +244,7 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'model': 'cookie',
                                             'label': '豆瓣cookie',
-                                            'placeholder': '建议自己F12填，留空则每次从cookiecloud获取，强烈建议手动填写',
+                                            'placeholder': '留空则每次从cookiecloud获取',
                                         }
                                     }
                                 ]
@@ -265,7 +265,7 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '需要开启媒体服务器的webhook，需要浏览器登录豆瓣，将豆瓣的cookie同步到cookiecloud，强烈建议手动填写cookie'
+                                            'text': '需要开启媒体服务器的webhook，需要浏览器登录豆瓣，将豆瓣的cookie同步到cookiecloud，也可以手动填写cookie，使用cookiecloud的话需要添加保活 https://movie.douban.com/subject/26934346/'
                                         }
                                     }
                                 ]
