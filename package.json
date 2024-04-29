@@ -10,7 +10,10 @@
   "AdaptiveIntroSkip": {
     "name": "自适应IntroSkip",
     "description": "通过用户的暂停与播放动作，批量标记片头片尾",
-    "version": "1.3",
+    "version": "1.4",
+    "history": {
+      "v1.4": "增加用户事件筛选"
+    },
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png",
     "author": "honue",
     "level": 1

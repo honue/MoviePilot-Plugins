@@ -17,7 +17,7 @@ class AdaptiveIntroSkip(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png"
     # 插件版本
-    plugin_version = "1.3"
+    plugin_version = "1.4"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -30,6 +30,7 @@ class AdaptiveIntroSkip(_PluginBase):
     auth_level = 1
 
     _enable: bool = False
+    _user: str = ''
     _begin_min: float = 4
     _end_min: float = 6
     _include: str = ''
@@ -39,6 +40,7 @@ class AdaptiveIntroSkip(_PluginBase):
     def init_plugin(self, config: dict = None):
         if config:
             self._enable = config.get("enable") or False
+            self._user = config.get("user") or ""
             self._begin_min = float(config.get("begin_min") or 4)
             self._end_min = float(config.get("end_min") or 6)
             # 关键词
@@ -51,10 +53,14 @@ class AdaptiveIntroSkip(_PluginBase):
     def hook(self, event: Event):
         event_info: WebhookEventInfo = event.event_data
         if event_info.channel != 'emby' and event_info.media_type != 'Episode':
-            logger.info("只支持Emby的Episode 目前其他服务端、其他影片不支持")
+            logger.info("只支持Emby的剧集 目前其他服务端、其他影片不支持")
             return
         if event_info.event not in ['playback.unpause', 'playback.stop']:
             # 'playback.pause' 'playback.start'
+            return
+
+        if self._user and event_info.user_name not in self._user.split(','):
+            logger.info(f"{event_info.user_name} 不在用户列表 {self._user} 里")
             return
 
         include_ret = include_keyword(event_info.item_path, self._include)
@@ -166,7 +172,7 @@ class AdaptiveIntroSkip(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
+                                    'md': 4
                                 },
                                 'content': [
                                     {
@@ -181,7 +187,7 @@ class AdaptiveIntroSkip(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 3
+                                    'md': 4
                                 },
                                 'content': [
                                     {
@@ -197,7 +203,7 @@ class AdaptiveIntroSkip(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 3
+                                    'md': 4
                                 },
                                 'content': [
                                     {
@@ -219,7 +225,23 @@ class AdaptiveIntroSkip(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
+                                    'md': 4
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'user',
+                                            'label': '媒体库用户名',
+                                            'placeholder': '多个以,分隔 留空默认全部用户',
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 4
                                 },
                                 'content': [
                                     {
@@ -231,12 +253,11 @@ class AdaptiveIntroSkip(_PluginBase):
                                         }
                                     }
                                 ]
-                            },
-                            {
+                            }, {
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
+                                    'md': 4
                                 },
                                 'content': [
                                     {
@@ -310,7 +331,7 @@ class AdaptiveIntroSkip(_PluginBase):
                                         'props': {
                                             'type': 'success',
                                             'variant': 'tonal',
-                                            'text': '目前支持使用emby自带片头片尾信息的应该有emby官方的客户端(包括小秘)、网页端，infuse(7.7.2)，vidhub(1.3.0)，第三方播放器需要跟作者反馈请求支持这个功能。获取章节信息的API是存在的 /emby/Shows/${item_id}/Episodes'
+                                            'text': '目前回报暂停信息的只有emby官方的客户端(包括小秘)、网页端，所以只推荐这几个客户端的用户使用。'
                                         }
                                     }
                                 ]
@@ -340,7 +361,8 @@ class AdaptiveIntroSkip(_PluginBase):
             "end_min": 6,
             "include": '',
             "exclude": '',
-            "spec": ''
+            "spec": '',
+            "user": ''
         }
 
     def get_state(self) -> bool:
