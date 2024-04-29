@@ -10,6 +10,7 @@ from app.utils.http import RequestUtils
 from cachetools import cached, TTLCache
 import requests
 import re
+import datetime
 
 class BangumiSync(_PluginBase):
     # 插件名称
@@ -37,12 +38,15 @@ class BangumiSync(_PluginBase):
     _user = None
     _bgm_uid = None
     _token = None
+    _tmdb_key = None
+    _request = None
 
     def init_plugin(self, config: dict = None):
         if config:
             self._enable = config.get('enable')
             self._user = config.get('user') if config.get('user') else None
             self._token = config.get('token') if config.get('token') else None
+            self._tmdb_key = settings.TMDB_API_KEY
             self.__update_config()
 
     @eventmanager.register(EventType.WebhookMessage)
@@ -56,6 +60,15 @@ class BangumiSync(_PluginBase):
             return
         if not BangumiSync.is_anime(path):
             return
+        
+        if self._request is None:
+            headers = {"Authorization": f"Bearer {self._token}",
+                    "User-Agent": BangumiSync.UA,
+                    "content-type": "application/json"}
+            self._request = requests.Session()
+            self._request.headers.update(headers)
+            if settings.PROXY:
+                self._request.proxies.update(settings.PROXY)
 
         if event_info.item_type in ["TV"] and \
                 event_info.event in play_start and \
@@ -75,78 +88,67 @@ class BangumiSync(_PluginBase):
             # 季 集
             season_id, episode_id = map(int, [event_info.season_id, event_info.episode_id])
             logger.info(f"开始播放 {title} 第{season_id}季 第{episode_id}集")
-            # mediainfo.original_title 是日文，bgm的日文搜索不太精确，有时会出现莫名其妙的结果
+            # 使用 tmdb airdate 来定位季，提高准确率
             subject_name, subject_id = self.get_subjectid_by_title(title, season_id)
             logger.info(f"{title} => {subject_name} https://bgm.tv/subject/{subject_id}")
             self.sync_watching_status(subject_id, episode_id)
 
-    @staticmethod
     @cached(TTLCache(maxsize=100, ttl=3600))
-    def get_subjectid_by_title(title: str, season: int) -> Tuple:
-        title = BangumiSync.format_title(title, season)
+    def get_subjectid_by_title(self, title: str, season: int) -> Tuple:
+        tmdb_id, original_name = self.get_tmdb_id(title)
+        start_date, end_date = self.get_airdate(tmdb_id, season)
         post_json = {
-            "keyword": title,
+            "keyword": original_name,
             "sort": "match",
-            "filter": {
-                "type": [
-                    2
-                ]
-            }
+            "filter": {"type": [2], "air_date": [f">={start_date}", f"<={end_date}"]},
         }
         url = f"https://api.bgm.tv/v0/search/subjects"
-        ret = RequestUtils(proxies=settings.PROXY,
-                           ua=BangumiSync.UA,
-                           accept_type="application/json"
-                           ).post(url=url, json=post_json).json()
-        data: dict = ret.get('data')[0]
-        return data.get('name_cn'), data.get('id')
+        resp = self._request.post(url, json=post_json).json()
+        if not resp.get("data"):
+            print(f"未找到{title}的bgm条目")
+            return
+        data = resp.get("data")[0]
+        year = data["date"][:4]
+        name_cn = f"{data["name_cn"]} ({year})"
+        subject_id = data["id"]
+        return name_cn, subject_id
+
+    @cached(TTLCache(maxsize=100, ttl=3600))
+    def get_tmdb_id(self, title: str):
+        url = f"https://api.tmdb.org/3/search/tv?query={title}&api_key={self._tmdb_key}"
+        ret = requests.get(url, proxies=settings.PROXY).json()
+        if ret.get("total_results"):
+            results = ret.get("results")
+        else:
+            return
+        for result in results:
+            if 16 in result.get("genre_ids"):
+                return result.get("id"), result.get("original_name")
+
+    @cached(TTLCache(maxsize=100, ttl=3600))
+    def get_airdate(self, tmdbid: int, season: int):
+        url = f"https://api.tmdb.org/3/tv/{tmdbid}/season/{season}?language=zh-CN&api_key={self._tmdb_key}"
+        resp = requests.get(url, proxies=settings.PROXY).json()
+        air_date = resp.get("air_date")
+        air_date = datetime.datetime.strptime(air_date, "%Y-%m-%d").date()
+        # 时差原因可能有偏差，且tmdb不计算第0话的首播时间
+        start_date = air_date - datetime.timedelta(days=15)
+        end_date = air_date + datetime.timedelta(days=15)
+        return start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
 
     @cached(TTLCache(maxsize=10, ttl=600))
     def sync_watching_status(self, subject_id, episode):
-        post_data = {
-            "type": 3,
-            "comment": "",
-            "private": False,
-            "tags": [
-                ""
-            ]
-        }
-        headers = {"Authorization": f"Bearer {self._token}",
-                   "User-Agent": BangumiSync.UA,
-                   "content-type": "application/json"}
-        request = requests.Session()
-        request.headers.update(headers)
-        if settings.PROXY:
-            request.proxies.update(settings.PROXY)
-        
         # 获取uid
         if not self._bgm_uid:
-            resp = request.get(url="https://api.bgm.tv/v0/me")
+            resp = self._request.get(url="https://api.bgm.tv/v0/me")
             self._bgm_uid = resp.json().get("id")
             logger.info(f"获取到 bgm_uid {self._bgm_uid}")
         
-        # 获取合集状态
-        resp = request.get(url=f"https://api.bgm.tv/v0/users/{self._bgm_uid}/collections/{subject_id}")
-        resp = resp.json()
-        if "type" in resp and resp["type"] in [2, 3]:
-            # 已经在看或看过，避免刷屏
-            logger.info("状态为看过或在看，无需更新在看状态")
-        else:
-            # 更新在看状态
-            resp = request.post(url=f"https://api.bgm.tv/v0/users/-/collections/{subject_id}", json=post_data)
-            if resp.status_code in [202, 204]:
-                logger.info("在看状态更新成功")
-            else:
-                logger.warning(resp.text)
-                logger.warning("在看状态更新失败")
+        # 更新合集状态
+        self.update_collection_status(subject_id)
         
         # 获取episode id
-        resp = request.get("https://api.bgm.tv/v0/episodes", params={"subject_id": subject_id})
-        if resp.status_code == 200:
-            logger.info("获取episode info成功")
-        else:
-            logger.warning(f"获取episode info失败, code={resp.status_code}")
-        ep_info = resp.json()["data"]
+        ep_info = self.get_episodes_info(subject_id)
 
         found = False
         for info in ep_info:
@@ -167,8 +169,38 @@ class BangumiSync(_PluginBase):
             return
 
         # 点格子
+        self.update_episode_status(episode_id)
+
+    @cached(TTLCache(maxsize=100, ttl=3600))
+    def update_collection_status(self, subject_id):
+        resp = self._request.get(url=f"https://api.bgm.tv/v0/users/{self._bgm_uid}/collections/{subject_id}")
+        resp = resp.json()
+        if "type" in resp and resp["type"] in [2, 3]:
+            # 已经在看或看过，避免刷屏
+            logger.info("状态为看过或在看，无需更新在看状态")
+        else:
+            # 更新在看状态
+            resp = self._request.post(url=f"https://api.bgm.tv/v0/users/-/collections/{subject_id}", json=post_data)
+            if resp.status_code in [202, 204]:
+                logger.info("在看状态更新成功")
+            else:
+                logger.warning(resp.text)
+                logger.warning("在看状态更新失败")
+
+    @cached(TTLCache(maxsize=100, ttl=3600))
+    def get_episodes_info(self, subject_id):
+        resp = self._request.get("https://api.bgm.tv/v0/episodes", params={"subject_id": subject_id})
+        if resp.status_code == 200:
+            logger.info("获取episode info成功")
+        else:
+            logger.warning(f"获取episode info失败, code={resp.status_code}")
+        ep_info = resp.json()["data"]
+        return ep_info
+
+    @cached(TTLCache(maxsize=100, ttl=3600))
+    def update_episode_status(self, episode_id):
         url = f"https://api.bgm.tv/v0/users/-/collections/-/episodes/{episode_id}"
-        resp = request.get(url)
+        resp = self._request.get(url)
         if resp.status_code == 200:
             resp = resp.json()
             if resp["type"] == 2:
@@ -177,7 +209,7 @@ class BangumiSync(_PluginBase):
         else:
             logger.warning(f"获取单集信息失败, code={resp.status_code}")
             return
-        resp = request.put(url, json={"type": 2})
+        resp = self._request.put(url, json={"type": 2})
         if resp.status_code == 204:
             logger.info("单集点格子成功")
         else:
