@@ -109,7 +109,7 @@ class BangumiSync(_PluginBase):
             return
         data = resp.get("data")[0]
         year = data["date"][:4]
-        name_cn = f"{data["name_cn"]} ({year})"
+        name_cn = f"{data['name_cn']} ({year})"
         subject_id = data["id"]
         return name_cn, subject_id
 
