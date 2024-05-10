@@ -10,8 +10,9 @@
   "AdaptiveIntroSkip": {
     "name": "自适应IntroSkip",
     "description": "通过用户的暂停与播放动作，批量标记片头片尾",
-    "version": "1.5",
+    "version": "1.6",
     "history": {
+      "v1.6": "(火柴总定制版)",
       "v1.5": "时间支持 分:秒 格式",
       "v1.4": "增加用户事件筛选"
     },
