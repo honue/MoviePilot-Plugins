@@ -211,7 +211,7 @@ class AdaptiveIntroSkip(_PluginBase):
                                         'component': 'VTextField',
                                         'props': {
                                             'model': 'begin_min',
-                                            'label': '片头最晚结束于（分钟）',
+                                            'label': '片头最晚结束于（分:秒）',
                                             'placeholder': '4',
                                         }
                                     }
@@ -227,7 +227,7 @@ class AdaptiveIntroSkip(_PluginBase):
                                         'component': 'VTextField',
                                         'props': {
                                             'model': 'end_min',
-                                            'label': '片尾最早开始于最后（分钟）',
+                                            'label': '片尾最早开始于最后（分:秒）',
                                             'placeholder': '6',
                                         }
                                     }
