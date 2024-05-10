@@ -305,7 +305,7 @@ class AdaptiveIntroSkip(_PluginBase):
                                             'model': 'spec',
                                             'rows': 6,
                                             'label': '特别指定开始结束时间段',
-                                            'placeholder': '用关键词特别指定开始结束时间段，格式：关键词#片头最大分钟#片尾最大分钟',
+                                            'placeholder': '用关键词特别指定开始结束时间段，格式：关键词#分:秒#分:秒。若以*结尾则指定时间点。',
                                         }
                                     }
                                 ]
