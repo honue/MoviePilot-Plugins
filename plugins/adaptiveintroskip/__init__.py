@@ -78,9 +78,9 @@ class AdaptiveIntroSkip(_PluginBase):
         end_time = self._end_min
 
         # 特别指定时间
+        manual = False
         spec_conf = self._spec.split('\n') if self._spec else []
         for spec in spec_conf[::-1]:
-            manual = False
             if spec.endswith('*'):
                 manual = True
                 spec = spec[:-1]
