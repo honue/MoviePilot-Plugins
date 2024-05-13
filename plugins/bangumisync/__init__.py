@@ -20,7 +20,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.7"
+    plugin_version = "1.8"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -47,10 +47,19 @@ class BangumiSync(_PluginBase):
             self._user = config.get('user') if config.get('user') else None
             self._token = config.get('token') if config.get('token') else None
             self._tmdb_key = settings.TMDB_API_KEY
+            headers = {"Authorization": f"Bearer {self._token}",
+                    "User-Agent": BangumiSync.UA,
+                    "content-type": "application/json"}
+            self._request = requests.Session()
+            self._request.headers.update(headers)
+            if settings.PROXY:
+                self._request.proxies.update(settings.PROXY)
             self.__update_config()
+            logger.debug("Bangumi在看同步插件初始化成功")
 
     @eventmanager.register(EventType.WebhookMessage)
     def hook(self, event: Event):
+        logger.debug(f"收到webhook事件: {event.event_data}")
         event_info: WebhookEventInfo = event.event_data
         # 只判断开始播放的TV剧集是不是anime 调试加入暂停
         play_start = "playback.start|media.play|PlaybackStart".split('|')
@@ -60,15 +69,6 @@ class BangumiSync(_PluginBase):
             return
         if not BangumiSync.is_anime(path):
             return
-        
-        if self._request is None:
-            headers = {"Authorization": f"Bearer {self._token}",
-                    "User-Agent": BangumiSync.UA,
-                    "content-type": "application/json"}
-            self._request = requests.Session()
-            self._request.headers.update(headers)
-            if settings.PROXY:
-                self._request.proxies.update(settings.PROXY)
 
         if event_info.item_type in ["TV"] and \
                 event_info.event in play_start and \
@@ -91,7 +91,11 @@ class BangumiSync(_PluginBase):
             # 使用 tmdb airdate 来定位季，提高准确率
             subject_name, subject_id = self.get_subjectid_by_title(title, season_id)
             logger.info(f"{title} => {subject_name} https://bgm.tv/subject/{subject_id}")
-            self.sync_watching_status(subject_id, episode_id)
+
+            try:
+                self.sync_watching_status(subject_id, episode_id)
+            except Exception as e:
+                logger.error(f"同步在看状态失败: {e}")
 
     @cached(TTLCache(maxsize=100, ttl=3600))
     def get_subjectid_by_title(self, title: str, season: int) -> Tuple:
@@ -143,6 +147,8 @@ class BangumiSync(_PluginBase):
             resp = self._request.get(url="https://api.bgm.tv/v0/me")
             self._bgm_uid = resp.json().get("id")
             logger.info(f"获取到 bgm_uid {self._bgm_uid}")
+        else:
+            logger.info(f"使用 bgm_uid {self._bgm_uid}")
         
         # 更新合集状态
         self.update_collection_status(subject_id)
@@ -164,6 +170,8 @@ class BangumiSync(_PluginBase):
                     found = True
                     break
         
+        last_episode = info == ep_info[-1]
+        
         if not found:
             logger.warning(f"未找到{subject_id}-{episode}，可能因为TMDB和BGM的episode号映射关系不一致")
             return
@@ -171,21 +179,37 @@ class BangumiSync(_PluginBase):
         # 点格子
         self.update_episode_status(episode_id)
 
+        # 最后一集，更新状态为看过
+        if last_episode:
+            self.update_collection_status(subject_id, 2)
+
     @cached(TTLCache(maxsize=100, ttl=3600))
-    def update_collection_status(self, subject_id):
+    def update_collection_status(self, subject_id, new_type=3):
         resp = self._request.get(url=f"https://api.bgm.tv/v0/users/{self._bgm_uid}/collections/{subject_id}")
         resp = resp.json()
-        if "type" in resp and resp["type"] in [2, 3]:
-            # 已经在看或看过，避免刷屏
-            logger.info("状态为看过或在看，无需更新在看状态")
+        type_dict = {0:"未看", 2:"看过", 3:"在看"}
+        old_type = 0 if "type" not in resp else resp["type"]
+        if old_type == 2:
+            # 已经看过，避免刷屏
+            logger.info(f"{type_dict[old_type]}->{type_dict[new_type]}，无需更新在看状态")
+            return
+        if old_type == new_type == 3:
+            # 已经在看，避免刷屏
+            logger.info(f"{type_dict[old_type]}->{type_dict[new_type]}，无需更新在看状态")
+            return
+        # 更新在看状态
+        post_data = {
+            "type": new_type,
+            "comment": "",
+            "private": False,
+            "tags": [""]
+        }
+        resp = self._request.post(url=f"https://api.bgm.tv/v0/users/-/collections/{subject_id}", json=post_data)
+        if resp.status_code in [202, 204]:
+            logger.info(f"{type_dict[old_type]}->{type_dict[new_type]}，在看状态更新成功")
         else:
-            # 更新在看状态
-            resp = self._request.post(url=f"https://api.bgm.tv/v0/users/-/collections/{subject_id}", json=post_data)
-            if resp.status_code in [202, 204]:
-                logger.info("在看状态更新成功")
-            else:
-                logger.warning(resp.text)
-                logger.warning("在看状态更新失败")
+            logger.warning(resp.text)
+            logger.warning(f"{type_dict[old_type]}->{type_dict[new_type]}，在看状态更新失败")
 
     @cached(TTLCache(maxsize=100, ttl=3600))
     def get_episodes_info(self, subject_id):
