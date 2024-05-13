@@ -90,27 +90,37 @@ class BangumiSync(_PluginBase):
             logger.info(f"开始播放 {title} 第{season_id}季 第{episode_id}集")
             # 使用 tmdb airdate 来定位季，提高准确率
             subject_name, subject_id = self.get_subjectid_by_title(title, season_id)
+            if subject_id is None:
+                return
             logger.info(f"{title} => {subject_name} https://bgm.tv/subject/{subject_id}")
 
             try:
                 self.sync_watching_status(subject_id, episode_id)
             except Exception as e:
-                logger.error(f"同步在看状态失败: {e}")
+                logger.warning(f"同步在看状态失败: {e}")
 
     @cached(TTLCache(maxsize=100, ttl=3600))
     def get_subjectid_by_title(self, title: str, season: int) -> Tuple:
+        logger.debug("尝试使用bgm api来获取 subject id...")
         tmdb_id, original_name = self.get_tmdb_id(title)
-        start_date, end_date = self.get_airdate(tmdb_id, season)
-        post_json = {
-            "keyword": original_name,
-            "sort": "match",
-            "filter": {"type": [2], "air_date": [f">={start_date}", f"<={end_date}"]},
-        }
+        if tmdb_id is not None:
+            start_date, end_date = self.get_airdate(tmdb_id, season)
+            post_json = {
+                "keyword": original_name,
+                "sort": "match",
+                "filter": {"type": [2], "air_date": [f">={start_date}", f"<={end_date}"]},
+            }
+        else:
+            post_json = {
+                "keyword": title,
+                "sort": "match",
+                "filter": {"type": [2]},
+            }
         url = f"https://api.bgm.tv/v0/search/subjects"
         resp = self._request.post(url, json=post_json).json()
         if not resp.get("data"):
-            print(f"未找到{title}的bgm条目")
-            return
+            logger.error(f"未找到{title}的bgm条目")
+            return None, None
         data = resp.get("data")[0]
         year = data["date"][:4]
         name_cn = f"{data['name_cn']} ({year})"
@@ -119,18 +129,21 @@ class BangumiSync(_PluginBase):
 
     @cached(TTLCache(maxsize=100, ttl=3600))
     def get_tmdb_id(self, title: str):
+        logger.debug("尝试使用tmdb api来获取 subject id...")
         url = f"https://api.tmdb.org/3/search/tv?query={title}&api_key={self._tmdb_key}"
         ret = requests.get(url, proxies=settings.PROXY).json()
         if ret.get("total_results"):
             results = ret.get("results")
         else:
-            return
+            logger.warning(f"未找到{title}的tmdb条目")
+            return None, None
         for result in results:
             if 16 in result.get("genre_ids"):
                 return result.get("id"), result.get("original_name")
 
     @cached(TTLCache(maxsize=100, ttl=3600))
     def get_airdate(self, tmdbid: int, season: int):
+        logger.debug("尝试使用tmdb api来获取 airdate...")
         url = f"https://api.tmdb.org/3/tv/{tmdbid}/season/{season}?language=zh-CN&api_key={self._tmdb_key}"
         resp = requests.get(url, proxies=settings.PROXY).json()
         air_date = resp.get("air_date")
@@ -146,9 +159,9 @@ class BangumiSync(_PluginBase):
         if not self._bgm_uid:
             resp = self._request.get(url="https://api.bgm.tv/v0/me")
             self._bgm_uid = resp.json().get("id")
-            logger.info(f"获取到 bgm_uid {self._bgm_uid}")
+            logger.debug(f"获取到 bgm_uid {self._bgm_uid}")
         else:
-            logger.info(f"使用 bgm_uid {self._bgm_uid}")
+            logger.debug(f"使用 bgm_uid {self._bgm_uid}")
         
         # 更新合集状态
         self.update_collection_status(subject_id)
