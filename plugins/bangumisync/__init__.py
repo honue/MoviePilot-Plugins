@@ -87,21 +87,21 @@ class BangumiSync(_PluginBase):
 
             # 季 集
             season_id, episode_id = map(int, [event_info.season_id, event_info.episode_id])
-            logger.info(f"开始播放 {title} 第{season_id}季 第{episode_id}集")
+            self._prefix = f"{title} 第{season_id}季 第{episode_id}集"
             # 使用 tmdb airdate 来定位季，提高准确率
             subject_name, subject_id = self.get_subjectid_by_title(title, season_id)
             if subject_id is None:
                 return
-            logger.info(f"{title} => {subject_name} https://bgm.tv/subject/{subject_id}")
+            logger.info(f"{self._prefix}: {title} => {subject_name} https://bgm.tv/subject/{subject_id}")
 
             try:
                 self.sync_watching_status(subject_id, episode_id)
             except Exception as e:
-                logger.warning(f"同步在看状态失败: {e}")
+                logger.warning(f"{self._prefix}: 同步在看状态失败: {e}")
 
     @cached(TTLCache(maxsize=100, ttl=3600))
     def get_subjectid_by_title(self, title: str, season: int) -> Tuple:
-        logger.debug("尝试使用bgm api来获取 subject id...")
+        logger.debug(f"{self._prefix}: 尝试使用 bgm api 来获取 subject id...")
         tmdb_id, original_name = self.get_tmdb_id(title)
         if tmdb_id is not None:
             start_date, end_date = self.get_airdate(tmdb_id, season)
@@ -119,7 +119,7 @@ class BangumiSync(_PluginBase):
         url = f"https://api.bgm.tv/v0/search/subjects"
         resp = self._request.post(url, json=post_json).json()
         if not resp.get("data"):
-            logger.error(f"未找到{title}的bgm条目")
+            logger.warning(f"{self._prefix}: 未找到{title}的bgm条目")
             return None, None
         data = resp.get("data")[0]
         year = data["date"][:4]
@@ -129,13 +129,13 @@ class BangumiSync(_PluginBase):
 
     @cached(TTLCache(maxsize=100, ttl=3600))
     def get_tmdb_id(self, title: str):
-        logger.debug("尝试使用tmdb api来获取 subject id...")
+        logger.debug(f"{self._prefix}: 尝试使用 tmdb api 来获取 subject id...")
         url = f"https://api.tmdb.org/3/search/tv?query={title}&api_key={self._tmdb_key}"
         ret = requests.get(url, proxies=settings.PROXY).json()
         if ret.get("total_results"):
             results = ret.get("results")
         else:
-            logger.warning(f"未找到{title}的tmdb条目")
+            logger.warning(f"{self._prefix}: 未找到 {title} 的 tmdb 条目")
             return None, None
         for result in results:
             if 16 in result.get("genre_ids"):
@@ -143,7 +143,7 @@ class BangumiSync(_PluginBase):
 
     @cached(TTLCache(maxsize=100, ttl=3600))
     def get_airdate(self, tmdbid: int, season: int):
-        logger.debug("尝试使用tmdb api来获取 airdate...")
+        logger.debug(f"{self._prefix}: 尝试使用 tmdb api 来获取 airdate...")
         url = f"https://api.tmdb.org/3/tv/{tmdbid}/season/{season}?language=zh-CN&api_key={self._tmdb_key}"
         resp = requests.get(url, proxies=settings.PROXY).json()
         air_date = resp.get("air_date")
@@ -159,9 +159,9 @@ class BangumiSync(_PluginBase):
         if not self._bgm_uid:
             resp = self._request.get(url="https://api.bgm.tv/v0/me")
             self._bgm_uid = resp.json().get("id")
-            logger.debug(f"获取到 bgm_uid {self._bgm_uid}")
+            logger.debug(f"{self._prefix}: 获取到 bgm_uid {self._bgm_uid}")
         else:
-            logger.debug(f"使用 bgm_uid {self._bgm_uid}")
+            logger.debug(f"{self._prefix}: 使用 bgm_uid {self._bgm_uid}")
         
         # 更新合集状态
         self.update_collection_status(subject_id)
@@ -186,7 +186,7 @@ class BangumiSync(_PluginBase):
         last_episode = info == ep_info[-1]
         
         if not found:
-            logger.warning(f"未找到{subject_id}-{episode}，可能因为TMDB和BGM的episode号映射关系不一致")
+            logger.warning(f"{self._prefix}: 未找到episode，可能因为TMDB和BGM的episode映射关系不一致")
             return
 
         # 点格子
@@ -204,11 +204,11 @@ class BangumiSync(_PluginBase):
         old_type = 0 if "type" not in resp else resp["type"]
         if old_type == 2:
             # 已经看过，避免刷屏
-            logger.info(f"{type_dict[old_type]}->{type_dict[new_type]}，无需更新在看状态")
+            logger.info(f"{self._prefix}: 合集状态 {type_dict[old_type]} => {type_dict[new_type]}，无需更新在看状态")
             return
         if old_type == new_type == 3:
             # 已经在看，避免刷屏
-            logger.info(f"{type_dict[old_type]}->{type_dict[new_type]}，无需更新在看状态")
+            logger.info(f"{self._prefix}: 合集状态 {type_dict[old_type]} => {type_dict[new_type]}，无需更新在看状态")
             return
         # 更新在看状态
         post_data = {
@@ -219,18 +219,18 @@ class BangumiSync(_PluginBase):
         }
         resp = self._request.post(url=f"https://api.bgm.tv/v0/users/-/collections/{subject_id}", json=post_data)
         if resp.status_code in [202, 204]:
-            logger.info(f"{type_dict[old_type]}->{type_dict[new_type]}，在看状态更新成功")
+            logger.info(f"{self._prefix}: 合集状态 {type_dict[old_type]} => {type_dict[new_type]}，在看状态更新成功")
         else:
             logger.warning(resp.text)
-            logger.warning(f"{type_dict[old_type]}->{type_dict[new_type]}，在看状态更新失败")
+            logger.warning(f"{self._prefix}: 合集状态 {type_dict[old_type]} => {type_dict[new_type]}，在看状态更新失败")
 
     @cached(TTLCache(maxsize=100, ttl=3600))
     def get_episodes_info(self, subject_id):
         resp = self._request.get("https://api.bgm.tv/v0/episodes", params={"subject_id": subject_id})
         if resp.status_code == 200:
-            logger.info("获取episode info成功")
+            logger.debug(f"{self._prefix}: 获取 episode info 成功")
         else:
-            logger.warning(f"获取episode info失败, code={resp.status_code}")
+            logger.warning(f"{self._prefix}: 获取 episode info 失败, code={resp.status_code}")
         ep_info = resp.json()["data"]
         return ep_info
 
@@ -241,16 +241,16 @@ class BangumiSync(_PluginBase):
         if resp.status_code == 200:
             resp = resp.json()
             if resp["type"] == 2:
-                logger.info("单集已经点过格子了")
+                logger.info(f"{self._prefix}: 单集已经点过格子了")
                 return
         else:
-            logger.warning(f"获取单集信息失败, code={resp.status_code}")
+            logger.warning(f"{self._prefix}: 获取单集信息失败, code={resp.status_code}")
             return
         resp = self._request.put(url, json={"type": 2})
         if resp.status_code == 204:
-            logger.info("单集点格子成功")
+            logger.info(f"{self._prefix}: 单集点格子成功")
         else:
-            logger.warning(f"单集点格子失败, code={resp.status_code}")
+            logger.warning(f"{self._prefix}: 单集点格子失败, code={resp.status_code}")
 
     @staticmethod
     def is_anime(path):
@@ -262,6 +262,7 @@ class BangumiSync(_PluginBase):
         for keyword in path_keyword.split(','):
             if path.count(keyword):
                 return True
+        logger.debug(f"{path} 不是动漫媒体库")
         return False
 
     @staticmethod
