@@ -31,8 +31,8 @@ class AdaptiveIntroSkip(_PluginBase):
 
     _enable: bool = False
     _user: str = ''
-    _begin_min: float = 4
-    _end_min: float = 6
+    _begin_min: str = '4'
+    _end_min: str = '6'
     _include: str = ''
     _exclude: str = ''
     _spec = ''
@@ -41,8 +41,8 @@ class AdaptiveIntroSkip(_PluginBase):
         if config:
             self._enable = config.get("enable") or False
             self._user = config.get("user") or ""
-            self._begin_min = float(config.get("begin_min") or 4)
-            self._end_min = float(config.get("end_min") or 6)
+            self._begin_min = str(config.get("begin_min")) or '4'
+            self._end_min = str(config.get("end_min")) or '6'
             # 关键词
             self._include = config.get("include") or ''
             self._exclude = config.get("exclude") or ''
@@ -106,7 +106,6 @@ class AdaptiveIntroSkip(_PluginBase):
 
         # 剧集在某集之后的所有剧集的item_id
         next_episode_ids = get_next_episode_ids(item_id=event_info.item_id, playing_idx=event_info.episode_id)
-
         if next_episode_ids:
             # 存储最新片头位置，新集入库使用本数据
             space_idx = event_info.item_name.index(' ')
@@ -115,7 +114,7 @@ class AdaptiveIntroSkip(_PluginBase):
                                                           "intro_end": 0,
                                                           "credits_start": 0}
             # 当前播放时间（s）在[开始,begin_min]之间，且是暂停播放后，恢复播放的动作，标记片头
-            if current_sec < self.trans_to_sec(begin_time) and event_info.event == 'playback.unpause' or manual:
+            if (current_sec < self.trans_to_sec(begin_time) and event_info.event == 'playback.unpause') or manual:
                 intro_end = self.trans_to_sec(begin_time) if manual else current_sec
                 # 批量标记之后的所有剧集，不影响已经看过的标记
                 for next_episode_id in next_episode_ids:
@@ -124,8 +123,7 @@ class AdaptiveIntroSkip(_PluginBase):
                 logger.info(
                     f"{event_info.item_name} 后续剧集片头设置在 {int(intro_end / 60)}分{int(intro_end % 60)}秒 结束")
             # 当前播放时间（s）在[end_min,结束]之间，且是退出播放动作，标记片尾
-            if current_sec > (
-                    total_sec - self.trans_to_sec(end_time)) and event_info.event == 'playback.stop' or manual:
+            if (current_sec > (total_sec - self.trans_to_sec(end_time)) and event_info.event == 'playback.stop') or manual:
                 credits_start = (total_sec - self.trans_to_sec(end_time)) if manual else current_sec
                 for next_episode_id in next_episode_ids:
                     update_credits(next_episode_id, credits_start)
@@ -374,8 +372,8 @@ class AdaptiveIntroSkip(_PluginBase):
             }
         ], {
             "enable": False,
-            "begin_min": 4,
-            "end_min": 6,
+            "begin_min": '4',
+            "end_min": '6',
             "include": '',
             "exclude": '',
             "spec": '',
