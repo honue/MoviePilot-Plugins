@@ -69,11 +69,11 @@
     "level": 1
   },
   "BangumiSync": {
-    "name": "Bangumi在看同步",
+    "name": "Bangumi打格子",
     "description": "将你在媒体库上的番剧观看，同步到Bangumi在看状态",
     "version": "1.8",
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg",
-    "author": "honue",
+    "author": "honue,happyTonakai",
     "level": 2,
     "history": {
       "v1.8": "播放最后一集标记为看完",
