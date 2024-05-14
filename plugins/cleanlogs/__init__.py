@@ -98,7 +98,10 @@ class CleanLogs(_PluginBase):
             with open(log_path, 'r', encoding='utf-8') as file:
                 lines = file.readlines()
 
-            top_lines = lines[-self._rows:]
+            if self._rows == 0:
+                top_lines = []
+            else:
+                top_lines = lines[-min(self._rows, len(lines)):]
 
             with open(log_path, 'w', encoding='utf-8') as file:
                 file.writelines(top_lines)
