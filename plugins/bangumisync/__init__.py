@@ -35,6 +35,7 @@ class BangumiSync(_PluginBase):
     UA = "honue/MoviePilot-Plugins (https://github.com/honue/MoviePilot-Plugins)"
 
     _enable = True
+    _on_played = False
     _user = None
     _bgm_uid = None
     _token = None
@@ -44,6 +45,7 @@ class BangumiSync(_PluginBase):
     def init_plugin(self, config: dict = None):
         if config:
             self._enable = config.get('enable')
+            self._on_played = config.get('on_played') if config.get('on_played') else False
             self._user = config.get('user') if config.get('user') else None
             self._token = config.get('token') if config.get('token') else None
             self._tmdb_key = settings.TMDB_API_KEY
@@ -62,7 +64,10 @@ class BangumiSync(_PluginBase):
         logger.debug(f"收到webhook事件: {event.event_data}")
         event_info: WebhookEventInfo = event.event_data
         # 只判断开始播放或被标记为已播放的TV剧集是不是anime 调试加入暂停
-        play_flag = "playback.start|media.play|PlaybackStart|item.markplayed".split('|')
+        if not self._on_played:
+            play_flag = "playback.start|media.play|PlaybackStart".split('|')
+        else:
+            play_flag = "item.markplayed|media.scrobble".split('|')  # for emby and plex
         # 根据路径判断是不是番剧
         path = event_info.item_path
         if not self._enable:
@@ -76,9 +81,9 @@ class BangumiSync(_PluginBase):
             """
                 event='playback.pause' channel='emby' item_type='TV' item_name='咒术回战 S1E47 关门' item_id='22646' item_path='/media/cartoon/动漫/咒术回战 (2020)/Season 1/咒术回战 - S01E47 - 第 47 集.mkv' season_id=1 episode_id=47 tmdb_id=None overview='渋谷事変の最終局面に呪術師が集うなかで、脹相は夏油の亡骸に寄生する“黒幕”の正体に気付く。そして、絶体絶命の危機に現れた特級術師・九十九由基。九十九と“黒幕”がそれぞれ語る人類の未来（ネクストステージ...' percentage=2.5705228512861966 ip='127.0.0.1' device_name='Chrome Windows' client='Emby Web' user_name='honue' image_url=None item_favorite=None save_reason=None item_isvirtual=None media_type='Episode'
             """
-            # 标题，mp 的 tmdb 搜索 api 有点问题，带空格的搜不出来，直接使用 emby 事件的标题
+            # 标题
             tmdb_id = event_info.tmdb_id
-            logger.info(f"匹配播放事件 {event_info.item_name} tmdb id = {tmdb_id}...")
+            logger.info(f"匹配播放事件 {event_info.event}: {event_info.item_name}, tmdb id = {tmdb_id}")
             match = re.match(r"^(.+)\sS\d+E\d+\s.+", event_info.item_name)
             if match:
                 title = match.group(1)
@@ -293,7 +298,7 @@ class BangumiSync(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 6
                                 },
                                 'content': [
                                     {
@@ -301,6 +306,22 @@ class BangumiSync(_PluginBase):
                                         'props': {
                                             'model': 'enable',
                                             'label': '启用插件',
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 6
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'on_played',
+                                            'label': '播放完成后同步',
+                                            'hint': '此功能仅支持emby和plex',
                                         }
                                     }
                                 ]
@@ -359,8 +380,8 @@ class BangumiSync(_PluginBase):
                                             'type': 'info',
                                             'variant': 'tonal',
                                             'text': 'access-token获取：https://next.bgm.tv/demo/access-token' + '\n' +
-                                                    'emby添加你mp的webhook（event要包括 播放-开始 或 用户-标记为已播放），开始播放即打格子则勾选前者，播放完毕再打格子则勾选后者，二选一即可：' + '\n' + 
-                                                    'http://127.0.0.1:3001/api/v1/webhook?token=<API_TOKEN>，<API_TOKEN>是mp在环境变量 / 配置文件中设置的token，默认为moviepilot' + '\n' +
+                                                    '需要开启媒体服务器的webhook，event要包括开始播放或标记为已播放（开启播放完成后同步）' + '\n' + 
+                                                    'http://127.0.0.1:3001/api/v1/webhook?token=<API_TOKEN>，<API_TOKEN>默认为moviepilot' + '\n' +
                                                     '感谢@HankunYu的想法'
                                             ,
                                             'style': 'white-space: pre-line;'
@@ -374,6 +395,7 @@ class BangumiSync(_PluginBase):
             }
         ], {
             "enable": False,
+            "on_played": False,
             "user": "",
             "token": ""
         }
@@ -387,6 +409,7 @@ class BangumiSync(_PluginBase):
         """
         self.update_config({
             "enable": self._enable,
+            "on_played": self._on_played,
             "user": self._user,
             "token": self._token
         })
