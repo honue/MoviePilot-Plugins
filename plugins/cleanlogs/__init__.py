@@ -9,8 +9,10 @@ from typing import List, Tuple, Dict, Any, Optional
 
 from app.core.config import settings
 from app.core.plugin import PluginManager
+from app.db.systemconfig_oper import SystemConfigOper
 from app.log import logger
 from app.plugins import _PluginBase
+from app.schemas.types import SystemConfigKey
 
 
 class CleanLogs(_PluginBase):
@@ -21,7 +23,7 @@ class CleanLogs(_PluginBase):
     # 插件图标
     plugin_icon = "clean.png"
     # 插件版本
-    plugin_version = "0.2"
+    plugin_version = "1.0"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -112,6 +114,12 @@ class CleanLogs(_PluginBase):
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         plugin_options = []
         local_plugins = PluginManager().get_local_plugins()
+        installed_plugins = SystemConfigOper().get(SystemConfigKey.UserInstalledPlugins) or []
+
+        for plugin_id in local_plugins:
+            if plugin_id not in installed_plugins:
+                local_plugins.remove(plugin_id)
+
         for plugin in local_plugins:
             plugin_options.append({
                 "title": plugin.plugin_name,

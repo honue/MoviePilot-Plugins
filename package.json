@@ -44,8 +44,9 @@
   "CleanLogs": {
     "name": "插件日志清理",
     "description": "定时清理插件产生的日志",
-    "version": "0.2",
+    "version": "1.0",
     "history": {
+      "v1.0": "插件选择列表优化",
       "v0.2": "好像删错了...，删除逻辑应该是保留末尾{row}行。"
     },
     "icon": "clean.png",
