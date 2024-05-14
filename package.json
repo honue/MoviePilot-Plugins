@@ -46,6 +46,7 @@
     "description": "定时清理插件产生的日志",
     "version": "0.2",
     "history": {
+      "v0.2": "好像删错了...，删除逻辑应该是保留末尾{row}行。"
     },
     "icon": "clean.png",
     "author": "honue",
