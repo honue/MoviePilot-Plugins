@@ -11,6 +11,10 @@ from cachetools import cached, TTLCache
 import requests
 import re
 import datetime
+import time
+
+
+
 
 class BangumiSync(_PluginBase):
     # 插件名称
@@ -57,10 +61,23 @@ class BangumiSync(_PluginBase):
             if settings.PROXY:
                 self._request.proxies.update(settings.PROXY)
             self.__update_config()
+            self._last_call_time = 0
             logger.debug("Bangumi在看同步插件初始化成功")
 
     @eventmanager.register(EventType.WebhookMessage)
     def hook(self, event: Event):
+        # 最小调用间隔3秒
+        last_call_time = self._last_call_time
+        elapsed_time = time.time() - last_call_time
+        min_interval = 3 
+        if elapsed_time < min_interval:
+            sleep_time = min_interval - elapsed_time
+            self._last_call_time = last_call_time + min_interval  # = now + sleep_time
+            logger.info(f"调用过于频繁，等待 {sleep_time:.2f} 秒后继续执行")
+            time.sleep(sleep_time)
+        else:
+            self._last_call_time = time.time()
+
         logger.debug(f"收到webhook事件: {event.event_data}")
         event_info: WebhookEventInfo = event.event_data
         # 只判断开始播放或被标记为已播放的TV剧集是不是anime 调试加入暂停
@@ -419,6 +436,9 @@ class BangumiSync(_PluginBase):
 
     def stop_service(self):
         pass
+
+
+
 
 
 if __name__ == "__main__":

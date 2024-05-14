@@ -8,6 +8,7 @@ from app.plugins.doubanwatching.DoubanHelper import *
 from app.schemas import WebhookEventInfo, MediaInfo
 from app.schemas.types import EventType, MediaType
 from app.log import logger
+import time
 
 
 class DouBanWatching(_PluginBase):
@@ -49,9 +50,22 @@ class DouBanWatching(_PluginBase):
         self._user = config.get("user") or ""
         self._exclude = config.get("exclude") or ""
         self._cookie = config.get("cookie") or ""
+        self._last_call_time = 0
 
     @eventmanager.register(EventType.WebhookMessage)
     def sync_log(self, event: Event):
+        # 最小调用间隔3秒
+        last_call_time = self._last_call_time
+        elapsed_time = time.time() - last_call_time
+        min_interval = 3 
+        if elapsed_time < min_interval:
+            sleep_time = min_interval - elapsed_time
+            self._last_call_time = last_call_time + min_interval  # = now + sleep_time
+            logger.info(f"调用过于频繁，等待 {sleep_time:.2f} 秒后继续执行")
+            time.sleep(sleep_time)
+        else:
+            self._last_call_time = time.time()
+
         event_info: WebhookEventInfo = event.event_data
         logger.debug(f"收到webhook事件: {event_info.event}")
         if not self._on_played:
@@ -339,3 +353,5 @@ class DouBanWatching(_PluginBase):
 
     def get_api(self) -> List[Dict[str, Any]]:
         pass
+
+
