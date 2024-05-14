@@ -7,6 +7,8 @@ from apscheduler.triggers.cron import CronTrigger
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
 
+from app.utils.string import StringUtils
+from app.helper.plugin import PluginHelper
 from app.core.config import settings
 from app.core.plugin import PluginManager
 from app.db.systemconfig_oper import SystemConfigOper
@@ -23,7 +25,7 @@ class CleanLogs(_PluginBase):
     # 插件图标
     plugin_icon = "clean.png"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -112,19 +114,18 @@ class CleanLogs(_PluginBase):
                 logger.info(f"已清理 {plugin_id} {len(lines) - self._rows} 行日志")
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+        # 已安装插件
+        local_plugins = self.get_local_plugins()
+        # 编历 local_plugins，生成插件类型选项
         plugin_options = []
-        local_plugins = PluginManager().get_local_plugins()
-        installed_plugins = SystemConfigOper().get(SystemConfigKey.UserInstalledPlugins) or []
 
-        for plugin_id in local_plugins:
-            if plugin_id not in installed_plugins:
-                local_plugins.remove(plugin_id)
-
-        for plugin in local_plugins:
+        for plugin_id in list(local_plugins.keys()):
+            local_plugin = local_plugins.get(plugin_id)
             plugin_options.append({
-                "title": plugin.plugin_name,
-                "value": plugin.id
+                "title": f"{local_plugin.get('plugin_name')} v{local_plugin.get('plugin_version')}",
+                "value": local_plugin.get("id")
             })
+
         return [
             {
                 'component': 'VForm',
@@ -252,6 +253,40 @@ class CleanLogs(_PluginBase):
             "cron": self._cron,
             "selected_ids": [],
         }
+
+    @staticmethod
+    def get_local_plugins():
+        """
+        获取本地插件
+        """
+        # 已安装插件
+        install_plugins = SystemConfigOper().get(SystemConfigKey.UserInstalledPlugins) or []
+
+        local_plugins = {}
+        # 线上插件列表
+        markets = settings.PLUGIN_MARKET.split(",")
+        for market in markets:
+            online_plugins = PluginHelper().get_plugins(market) or {}
+            for pid, plugin in online_plugins.items():
+                if pid in install_plugins:
+                    local_plugin = local_plugins.get(pid)
+                    if local_plugin:
+                        if StringUtils.compare_version(local_plugin.get("plugin_version"), plugin.get("version")) < 0:
+                            local_plugins[pid] = {
+                                "id": pid,
+                                "plugin_name": plugin.get("name"),
+                                "repo_url": market,
+                                "plugin_version": plugin.get("version")
+                            }
+                    else:
+                        local_plugins[pid] = {
+                            "id": pid,
+                            "plugin_name": plugin.get("name"),
+                            "repo_url": market,
+                            "plugin_version": plugin.get("version")
+                        }
+
+        return local_plugins
 
     def get_state(self) -> bool:
         return self._enable
