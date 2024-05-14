@@ -71,11 +71,12 @@
   "BangumiSync": {
     "name": "Bangumi打格子",
     "description": "将你在媒体库上的番剧观看，同步到Bangumi在看状态",
-    "version": "1.8",
+    "version": "1.9",
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg",
     "author": "honue,happyTonakai",
     "level": 2,
     "history": {
+      "v1.9": "支持开始播放/标记为已播放两种触发方式，需要在emby中配置对应的通知webhook",
       "v1.8": "播放最后一集标记为看完",
       "v1.7": "改进番剧识别的准确率",
       "v1.6": "支持单集点格子",

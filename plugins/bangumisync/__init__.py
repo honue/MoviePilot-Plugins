@@ -20,7 +20,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.8"
+    plugin_version = "1.9"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
@@ -61,8 +61,8 @@ class BangumiSync(_PluginBase):
     def hook(self, event: Event):
         logger.debug(f"收到webhook事件: {event.event_data}")
         event_info: WebhookEventInfo = event.event_data
-        # 只判断开始播放的TV剧集是不是anime 调试加入暂停
-        play_start = "playback.start|media.play|PlaybackStart".split('|')
+        # 只判断开始播放或被标记为已播放的TV剧集是不是anime 调试加入暂停
+        play_flag = "playback.start|media.play|PlaybackStart|item.markplayed".split('|')
         # 根据路径判断是不是番剧
         path = event_info.item_path
         if not self._enable:
@@ -71,7 +71,7 @@ class BangumiSync(_PluginBase):
             return
 
         if event_info.item_type in ["TV"] and \
-                event_info.event in play_start and \
+                event_info.event in play_flag and \
                 event_info.user_name in self._user.split(','):
             """
                 event='playback.pause' channel='emby' item_type='TV' item_name='咒术回战 S1E47 关门' item_id='22646' item_path='/media/cartoon/动漫/咒术回战 (2020)/Season 1/咒术回战 - S01E47 - 第 47 集.mkv' season_id=1 episode_id=47 tmdb_id=None overview='渋谷事変の最終局面に呪術師が集うなかで、脹相は夏油の亡骸に寄生する“黒幕”の正体に気付く。そして、絶体絶命の危機に現れた特級術師・九十九由基。九十九と“黒幕”がそれぞれ語る人類の未来（ネクストステージ...' percentage=2.5705228512861966 ip='127.0.0.1' device_name='Chrome Windows' client='Emby Web' user_name='honue' image_url=None item_favorite=None save_reason=None item_isvirtual=None media_type='Episode'
@@ -359,7 +359,8 @@ class BangumiSync(_PluginBase):
                                             'type': 'info',
                                             'variant': 'tonal',
                                             'text': 'access-token获取：https://next.bgm.tv/demo/access-token' + '\n' +
-                                                    'emby添加你mp的webhook（event要包括播放）： http://127.0.0.1:3001/api/v1/webhook?token=moviepilot' + '\n' +
+                                                    'emby添加你mp的webhook（event要包括 播放-开始 或 用户-标记为已播放），开始播放即打格子则勾选前者，播放完毕再打格子则勾选后者，二选一即可：' + '\n' + 
+                                                    'http://127.0.0.1:3001/api/v1/webhook?token=<API_TOKEN>，<API_TOKEN>是mp在环境变量 / 配置文件中设置的token，默认为moviepilot' + '\n' +
                                                     '感谢@HankunYu的想法'
                                             ,
                                             'style': 'white-space: pre-line;'
