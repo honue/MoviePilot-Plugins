@@ -12,9 +12,9 @@ https://github.com/honue/MoviePilot-Plugins/
 
 > Bangumi [成员关注动画榜](https://bgm.tv/anime)订阅，时下流行番剧订阅，个人想看订阅
 
-- Bangumi在看同步
+- Bangumi打格子
 
-> 将emby在看记录，同步到 [bangumi日志](https://bgm.tv/)
+> 将媒体服务器在看活动，同步到 [bangumi日志](https://bgm.tv/)
 
 - [Tracker替换插件](./docs/trackereditor.md)
 
@@ -39,6 +39,10 @@ https://github.com/honue/MoviePilot-Plugins/
 - 快捷指令订阅
 
 > IOS快捷指令，快速选片添加订阅
+
+- 插件日志删除
+
+> 定时清理插件产生的日志
 
 ### 如果对你有所帮助⭐
 
