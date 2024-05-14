@@ -18,7 +18,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.7"
+    plugin_version = "1.8"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -51,7 +51,8 @@ class DouBanWatching(_PluginBase):
     @eventmanager.register(EventType.WebhookMessage)
     def sync_log(self, event: Event):
         event_info: WebhookEventInfo = event.event_data
-        play_start = "playback.start|media.play|PlaybackStart".split('|')
+        logger.debug(f"收到webhook事件: {event_info.event}")
+        play_flag = "playback.start|media.play|PlaybackStart|item.markplayed".split('|')
         # 根据媒体文件路径判断是否要同步到影音档案
         path = event_info.item_path
         if not DouBanWatching.exclude_keyword(path=path, keywords=self._exclude).get("ret"):
@@ -59,7 +60,7 @@ class DouBanWatching(_PluginBase):
             return
 
         processed_items: Dict = self.get_data("processed") or {}
-        if event_info.event in play_start and \
+        if event_info.event in play_flag and \
                 event_info.user_name in self._user.split(','):
             """
                 event='playback.pause' channel='emby' item_type='TV' item_name='咒术回战 S1E47 关门' item_id='22646' item_path='/media/cartoon/动漫/咒术回战 (2020)/Season 1/咒术回战 - S01E47 - 第 47 集.mkv' season_id=1 episode_id=47 tmdb_id=None overview='渋谷事変の最終局面に呪術師が集うなかで、脹相は夏油の亡骸に寄生する“黒幕”の正体に気付く。そして、絶体絶命の危機に現れた特級術師・九十九由基。九十九と“黒幕”がそれぞれ語る人類の未来（ネクストステージ...' percentage=2.5705228512861966 ip='127.0.0.1' device_name='Chrome Windows' client='Emby Web' user_name='honue' image_url=None item_favorite=None save_reason=None item_isvirtual=None media_type='Episode'
@@ -265,7 +266,8 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '需要开启媒体服务器的webhook，需要浏览器登录豆瓣，将豆瓣的cookie同步到cookiecloud，也可以手动填写cookie，使用cookiecloud的话需要添加保活 https://movie.douban.com/subject/26934346/'
+                                            'text': '需要开启媒体服务器的webhook，event要包括 开始播放 或 标记为已播放，二选一即可\n' + 
+                                                    '需要浏览器登录豆瓣，将豆瓣的cookie同步到cookiecloud，也可以手动填写cookie，使用cookiecloud的话需要添加保活'
                                         }
                                     }
                                 ]
