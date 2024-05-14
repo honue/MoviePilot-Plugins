@@ -21,7 +21,7 @@ class CleanLogs(_PluginBase):
     # 插件图标
     plugin_icon = "clean.png"
     # 插件版本
-    plugin_version = "0.1"
+    plugin_version = "0.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -98,7 +98,7 @@ class CleanLogs(_PluginBase):
             with open(log_path, 'r', encoding='utf-8') as file:
                 lines = file.readlines()
 
-            top_lines = lines[:self._rows]
+            top_lines = lines[-self._rows:]
 
             with open(log_path, 'w', encoding='utf-8') as file:
                 file.writelines(top_lines)

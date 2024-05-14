@@ -44,7 +44,7 @@
   "CleanLogs": {
     "name": "插件日志清理",
     "description": "定时清理插件产生的日志",
-    "version": "0.1",
+    "version": "0.2",
     "history": {
     },
     "icon": "clean.png",
