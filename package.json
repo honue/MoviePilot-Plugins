@@ -41,6 +41,16 @@
     "author": "honue",
     "level": 1
   },
+  "CleanLogs": {
+    "name": "插件日志清理",
+    "description": "定时清理插件产生的日志",
+    "version": "0.1",
+    "history": {
+    },
+    "icon": "clean.png",
+    "author": "honue",
+    "level": 1
+  },
   "BangumiRank": {
     "name": "Bangumi榜单订阅",
     "description": "Bangumi成员关注动画榜，时下流行番剧订阅，个人想看订阅",
