@@ -14,8 +14,6 @@ import datetime
 import time
 
 
-
-
 class BangumiSync(_PluginBase):
     # 插件名称
     plugin_name = "Bangumi打格子"
@@ -84,7 +82,7 @@ class BangumiSync(_PluginBase):
         if not self._on_played:
             play_flag = "playback.start|media.play|PlaybackStart".split('|')
         else:
-            play_flag = "item.markplayed|media.scrobble".split('|')  # for emby and plex
+            play_flag = "item.markplayed|playback.stop|media.scrobble|PlaybackStop".split('|')
         # 根据路径判断是不是番剧
         path = event_info.item_path
         if not self._enable:
@@ -98,6 +96,13 @@ class BangumiSync(_PluginBase):
             """
                 event='playback.pause' channel='emby' item_type='TV' item_name='咒术回战 S1E47 关门' item_id='22646' item_path='/media/cartoon/动漫/咒术回战 (2020)/Season 1/咒术回战 - S01E47 - 第 47 集.mkv' season_id=1 episode_id=47 tmdb_id=None overview='渋谷事変の最終局面に呪術師が集うなかで、脹相は夏油の亡骸に寄生する“黒幕”の正体に気付く。そして、絶体絶命の危機に現れた特級術師・九十九由基。九十九と“黒幕”がそれぞれ語る人類の未来（ネクストステージ...' percentage=2.5705228512861966 ip='127.0.0.1' device_name='Chrome Windows' client='Emby Web' user_name='honue' image_url=None item_favorite=None save_reason=None item_isvirtual=None media_type='Episode'
             """
+            # emby/jellyfin 根据停止播放时的百分比来判断是否播放完成
+            if event_info.event == "playback.stop":
+                if event_info.percentage is None or event_info.percentage < 90:
+                    return
+            elif event_info.event == "PlaybackStop":
+                if event_info.percentage is None or event_info.percentage < 90:
+                    return
             # 标题
             tmdb_id = event_info.tmdb_id
             logger.info(f"匹配播放事件 {event_info.event}: {event_info.item_name}, tmdb id = {tmdb_id}")
@@ -338,7 +343,6 @@ class BangumiSync(_PluginBase):
                                         'props': {
                                             'model': 'on_played',
                                             'label': '播放完成后同步',
-                                            'hint': '此功能仅支持emby和plex',
                                         }
                                     }
                                 ]
@@ -397,7 +401,7 @@ class BangumiSync(_PluginBase):
                                             'type': 'info',
                                             'variant': 'tonal',
                                             'text': 'access-token获取：https://next.bgm.tv/demo/access-token' + '\n' +
-                                                    '需要开启媒体服务器的webhook，event要包括开始播放或标记为已播放（开启播放完成后同步）' + '\n' + 
+                                                    '需要开启媒体服务器的webhook，event要包括开始播放和停止播放' + '\n' + 
                                                     'http://127.0.0.1:3001/api/v1/webhook?token=<API_TOKEN>，<API_TOKEN>默认为moviepilot' + '\n' +
                                                     '感谢@HankunYu的想法'
                                             ,

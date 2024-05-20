@@ -8,7 +8,6 @@ from app.plugins.doubanwatching.DoubanHelper import *
 from app.schemas import WebhookEventInfo, MediaInfo
 from app.schemas.types import EventType, MediaType
 from app.log import logger
-import time
 
 
 class DouBanWatching(_PluginBase):
@@ -50,28 +49,15 @@ class DouBanWatching(_PluginBase):
         self._user = config.get("user") or ""
         self._exclude = config.get("exclude") or ""
         self._cookie = config.get("cookie") or ""
-        self._last_call_time = 0
 
     @eventmanager.register(EventType.WebhookMessage)
     def sync_log(self, event: Event):
-        # 最小调用间隔3秒
-        last_call_time = self._last_call_time
-        elapsed_time = time.time() - last_call_time
-        min_interval = 3 
-        if elapsed_time < min_interval:
-            sleep_time = min_interval - elapsed_time
-            self._last_call_time = last_call_time + min_interval  # = now + sleep_time
-            logger.info(f"调用过于频繁，等待 {sleep_time:.2f} 秒后继续执行")
-            time.sleep(sleep_time)
-        else:
-            self._last_call_time = time.time()
-
         event_info: WebhookEventInfo = event.event_data
         logger.debug(f"收到webhook事件: {event_info.event}")
         if not self._on_played:
             play_flag = "playback.start|media.play|PlaybackStart".split('|')
         else:
-            play_flag = "item.markplayed|media.scrobble".split('|')  # for emby and plex
+            play_flag = "playback.stop|media.scrobble|PlaybackStop".split('|')
         # 根据媒体文件路径判断是否要同步到影音档案
         path = event_info.item_path
         if not DouBanWatching.exclude_keyword(path=path, keywords=self._exclude).get("ret"):
@@ -84,6 +70,14 @@ class DouBanWatching(_PluginBase):
             """
                 event='playback.pause' channel='emby' item_type='TV' item_name='咒术回战 S1E47 关门' item_id='22646' item_path='/media/cartoon/动漫/咒术回战 (2020)/Season 1/咒术回战 - S01E47 - 第 47 集.mkv' season_id=1 episode_id=47 tmdb_id=None overview='渋谷事変の最終局面に呪術師が集うなかで、脹相は夏油の亡骸に寄生する“黒幕”の正体に気付く。そして、絶体絶命の危機に現れた特級術師・九十九由基。九十九と“黒幕”がそれぞれ語る人類の未来（ネクストステージ...' percentage=2.5705228512861966 ip='127.0.0.1' device_name='Chrome Windows' client='Emby Web' user_name='honue' image_url=None item_favorite=None save_reason=None item_isvirtual=None media_type='Episode'
             """
+            # emby/jellyfin 根据停止播放时的百分比来判断是否播放完成
+            if event_info.event == "playback.stop":
+                if event_info.percentage is None or event_info.percentage < 90:
+                    return
+            elif event_info.event == "PlaybackStop":
+                if event_info.percentage is None or event_info.percentage < 90:
+                    return
+
             tmdb_id = event_info.tmdb_id
             logger.info(f"匹配播放事件 {event_info.event}: {event_info.item_name}, tmdb id = {tmdb_id}")
             # 处理电视剧
@@ -218,7 +212,6 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'model': 'on_played',
                                             'label': '播放完成后同步',
-                                            'hint': '此功能仅支持emby和plex',
                                         }
                                     }
                                 ]
@@ -300,7 +293,7 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '需要开启媒体服务器的webhook，event要包括开始播放或标记为已播放（开启播放完成后同步）' + '\n' + 
+                                            'text': '需要开启媒体服务器的webhook，event要包括开始播放和停止播放' + '\n' + 
                                                     'http://127.0.0.1:3001/api/v1/webhook?token=<API_TOKEN>，<API_TOKEN>默认为moviepilot' + '\n' +
                                                     '需要浏览器登录豆瓣，将豆瓣的cookie同步到cookiecloud，也可以手动填写cookie，使用cookiecloud的话需要添加保活'
                                         }
