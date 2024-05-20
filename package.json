@@ -27,7 +27,7 @@
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/douban.png",
     "author": "honue",
     "history": {
-      "v1.8": "支持开始播放/标记为已播放两种触发方式，需要在媒体服务器中配置对应的webhook通知"
+      "v1.8": "支持开始播放/播放完成两种触发方式，需要在媒体服务器中配置对应的webhook通知"
     },
     "level": 1
   },
@@ -79,7 +79,7 @@
     "author": "honue,happyTonakai",
     "level": 2,
     "history": {
-      "v1.9": "支持开始播放/标记为已播放两种触发方式，需要在媒体服务器中配置对应的webhook通知",
+      "v1.9": "支持开始播放/播放完成两种触发方式，需要在媒体服务器中配置对应的webhook通知",
       "v1.8": "播放最后一集标记为看完",
       "v1.7": "改进番剧识别的准确率",
       "v1.6": "支持单集点格子",
