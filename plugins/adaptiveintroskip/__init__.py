@@ -52,14 +52,10 @@ class AdaptiveIntroSkip(_PluginBase):
     @eventmanager.register(EventType.WebhookMessage)
     def hook(self, event: Event):
         event_info: WebhookEventInfo = event.event_data
-        logger.info(' ')
-        if event_info.channel != 'emby' and event_info.media_type != 'Episode':
-            logger.info("只支持Emby的剧集 目前其他服务端、其他影片不支持")
-            return
-        if event_info.event not in ['playback.unpause', 'playback.stop']:
+        if event_info.event not in ['playback.unpause', 'playback.stop'] or event_info.media_type != 'Episode':
             # 'playback.pause' 'playback.start'
             return
-
+        logger.info(' ')
         if self._user and event_info.user_name not in self._user.split(','):
             logger.info(f"{event_info.user_name} 不在用户列表 {self._user} 里")
             return
@@ -128,7 +124,8 @@ class AdaptiveIntroSkip(_PluginBase):
                 logger.info(
                     f"{event_info.item_name} 后续剧集片头设置在 {int(intro_end / 60)}分{int(intro_end % 60)}秒 结束")
             # 当前播放时间（s）在[end_min,结束]之间，且是退出播放动作，标记片尾
-            if (current_sec > (total_sec - self.trans_to_sec(end_time)) and event_info.event == 'playback.stop') or manual:
+            if (current_sec > (
+                    total_sec - self.trans_to_sec(end_time)) and event_info.event == 'playback.stop') or manual:
                 credits_start = (total_sec - self.trans_to_sec(end_time)) if manual else current_sec
                 for next_episode_id in next_episode_ids:
                     update_credits(next_episode_id, credits_start)
@@ -141,12 +138,12 @@ class AdaptiveIntroSkip(_PluginBase):
     @eventmanager.register(EventType.TransferComplete)
     def episodes_hook(self, event: Event):
         event_info: MetaBase = event.event_data.get("meta")
+        series_name = event.event_data.get("mediainfo").title
+        if not series_name:
+            return
         logger.info(' ')
         if event_info.total_episode > 5:
             logger.info(f"本事件只处理追更订阅")
-            return
-        series_name = event.event_data.get("mediainfo").title
-        if not series_name:
             return
         chapter_info: dict = self.get_data(series_name)
         if not chapter_info:
@@ -157,7 +154,7 @@ class AdaptiveIntroSkip(_PluginBase):
         next_episode_ids = get_next_episode_ids(item_id=chapter_info.get("item_id"),
                                                 season_id=event_info.begin_season,
                                                 episode_id=event_info.begin_episode)
-        logger.info(f'新入库媒体item_id {",".join(map(str, next_episode_ids))}')
+        logger.info(f'{series_name} 新入库剧集，item_id:{",".join(map(str, next_episode_ids))}')
 
         if next_episode_ids:
             # 批量标记新入库的剧集
