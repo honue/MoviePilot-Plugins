@@ -4,7 +4,7 @@ from app.core.event import eventmanager, Event
 from app.plugins import _PluginBase
 from app.schemas import WebhookEventInfo
 from app.schemas.types import EventType
-from .SkipHelper import *
+from .skip_helper import *
 from app.log import logger
 from app.core.meta import MetaBase
 
@@ -17,7 +17,7 @@ class AdaptiveIntroSkip(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png"
     # 插件版本
-    plugin_version = "1.6"
+    plugin_version = "1.7"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -97,7 +97,8 @@ class AdaptiveIntroSkip(_PluginBase):
 
         # 当前正在播放集的信息
         current_percentage = event_info.percentage
-        current_video_item_id = get_current_video_item_id(item_id=event_info.item_id, playing_idx=event_info.episode_id)
+        current_video_item_id = get_current_video_item_id(item_id=event_info.item_id, season_id=event_info.season_id,
+                                                          episode_id=event_info.episode_id)
         total_sec = get_total_time(current_video_item_id)
         current_sec = current_percentage / 100 * total_sec
 
@@ -106,7 +107,10 @@ class AdaptiveIntroSkip(_PluginBase):
             return
 
         # 剧集在某集之后的所有剧集的item_id
-        next_episode_ids = get_next_episode_ids(item_id=event_info.item_id, playing_idx=event_info.episode_id)
+        next_episode_ids = get_next_episode_ids(item_id=event_info.item_id,
+                                                season_id=event_info.season_id,
+                                                episode_id=event_info.episode_id
+                                                )
         if next_episode_ids:
             # 存储最新片头位置，新集入库使用本数据
             space_idx = event_info.item_name.index(' S')
@@ -151,7 +155,8 @@ class AdaptiveIntroSkip(_PluginBase):
 
         # 新入库剧集的item_id
         next_episode_ids = get_next_episode_ids(item_id=chapter_info.get("item_id"),
-                                                playing_idx=event_info.begin_episode)
+                                                season_id=event_info.begin_season,
+                                                episode_id=event_info.begin_episode)
         logger.info(f'新入库媒体item_id {",".join(map(str, next_episode_ids))}')
 
         if next_episode_ids:

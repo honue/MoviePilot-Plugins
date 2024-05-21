@@ -21,31 +21,31 @@ def format_time(seconds):
     return formatted_time
 
 
-def get_next_episode_ids(item_id, playing_idx) -> list:
+def get_next_episode_ids(item_id, season_id, episode_id) -> list:
     try:
         ids = []
         response = requests.get(f'{base_url}Shows/{item_id}/Episodes', headers=headers)
         episodes_info = response.json()
         # 查找下一集的 ID
         for episode in episodes_info['Items']:
-            if episode['IndexNumber'] >= playing_idx:
+            if episode['IndexNumber'] >= episode_id and season_id == episode['ParentIndexNumber']:
                 next_episode_item_id = episode['Id']
-                logger.debug(f'第{playing_idx + 1}集的 item_ID 为: {next_episode_item_id}')
+                logger.debug(f'第{episode_id + 1}集的 item_ID 为: {next_episode_item_id}')
                 ids.append(next_episode_item_id)
         return ids
     except Exception as e:
         logger.error("异常错误：%s" % str(e))
 
 
-def get_current_video_item_id(item_id, playing_idx):
+def get_current_video_item_id(item_id, season_id, episode_id):
     try:
         response = requests.get(f'{base_url}Shows/{item_id}/Episodes', headers=headers)
         episodes_info = response.json()
         # 查找当前集的 ID
         for episode in episodes_info['Items']:
-            if episode['IndexNumber'] == playing_idx:
+            if episode['IndexNumber'] == episode_id and episode['ParentIndexNumber'] == season_id:
                 item_id = episode['Id']
-                logger.debug(f'第{playing_idx}集的 item_ID 为: {item_id}')
+                logger.debug(f'第{episode_id}集的 item_ID 为: {item_id}')
                 return item_id
         return -1
     except Exception as e:
@@ -139,5 +139,5 @@ def exclude_keyword(path: str, keywords: str) -> dict:
 
 if __name__ == '__main__':
     # pause_time('7')
-    # get_next_episode_ids(7, 2)
-    get_total_time(1847)
+    print(*get_next_episode_ids(5842, 2, 2))
+    # get_total_time(1847)
