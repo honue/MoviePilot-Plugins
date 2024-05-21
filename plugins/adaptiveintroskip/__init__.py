@@ -52,6 +52,7 @@ class AdaptiveIntroSkip(_PluginBase):
     @eventmanager.register(EventType.WebhookMessage)
     def hook(self, event: Event):
         event_info: WebhookEventInfo = event.event_data
+        logger.info(' ')
         if event_info.channel != 'emby' and event_info.media_type != 'Episode':
             logger.info("只支持Emby的剧集 目前其他服务端、其他影片不支持")
             return
@@ -101,14 +102,14 @@ class AdaptiveIntroSkip(_PluginBase):
         current_sec = current_percentage / 100 * total_sec
 
         if self.trans_to_sec(begin_time) < current_sec < (total_sec - self.trans_to_sec(end_time)):
-            logger.info("不在设置的时间段内，不标记片头片尾")
+            logger.info(f"{event_info.item_name} 目前不在设置的时间段内，不标记片头片尾")
             return
 
         # 剧集在某集之后的所有剧集的item_id
         next_episode_ids = get_next_episode_ids(item_id=event_info.item_id, playing_idx=event_info.episode_id)
         if next_episode_ids:
             # 存储最新片头位置，新集入库使用本数据
-            space_idx = event_info.item_name.index(' ')
+            space_idx = event_info.item_name.index(' S')
             series_name = event_info.item_name[:space_idx]
             chapter_info = self.get_data(series_name) or {"item_id": event_info.item_id,
                                                           "intro_end": 0,
@@ -136,20 +137,22 @@ class AdaptiveIntroSkip(_PluginBase):
     @eventmanager.register(EventType.TransferComplete)
     def episodes_hook(self, event: Event):
         event_info: MetaBase = event.event_data.get("meta")
+        logger.info(' ')
         if event_info.total_episode > 5:
-            logger.debug(f"本事件只处理追更订阅")
+            logger.info(f"本事件只处理追更订阅")
             return
         series_name = event.event_data.get("mediainfo").title
         if not series_name:
             return
         chapter_info: dict = self.get_data(series_name)
         if not chapter_info:
-            logger.debug(f"{series_name} 没有设置过片头片尾信息，跳过")
+            logger.info(f"{series_name} 没有设置过片头片尾信息，跳过")
             return
 
         # 新入库剧集的item_id
         next_episode_ids = get_next_episode_ids(item_id=chapter_info.get("item_id"),
                                                 playing_idx=event_info.begin_episode)
+        logger.info(f'新入库媒体item_id {",".join(map(str, next_episode_ids))}')
 
         if next_episode_ids:
             # 批量标记新入库的剧集
@@ -324,7 +327,7 @@ class AdaptiveIntroSkip(_PluginBase):
                                         'props': {
                                             'type': 'warning',
                                             'variant': 'tonal',
-                                            'text': 'Supported by ChapterAPI, 目前只支持Emby, Emby需要安装ChapterAPI插件，需要在emby通知中添加mp的回调webhook'
+                                            'text': 'Supported by ChapterAPI, 目前只支持Emby, Emby需要安装ChapterAPI插件，需要在emby通知中添加mp的回调webhook。v1.6遇到问题请重置插件'
                                         }
                                     }
                                 ]
