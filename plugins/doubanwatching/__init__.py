@@ -265,7 +265,7 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '需要开启媒体服务器的webhook，需要浏览器登录豆瓣，将豆瓣的cookie同步到cookiecloud，也可以手动填写cookie，使用cookiecloud的话需要添加保活 https://movie.douban.com/subject/26934346/'
+                                            'text': '需要开启媒体服务器的webhook，需要浏览器登录豆瓣，手动将cookie填写到此处（不异地登陆有效期很久），也可以将豆瓣的cookie同步到cookiecloud（容易遇到问题），使用cookiecloud的话需要添加保活 https://movie.douban.com/subject/26934346/'
                                         }
                                     }
                                 ]
