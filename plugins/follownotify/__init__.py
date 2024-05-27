@@ -19,7 +19,7 @@ class FollowNotify(_PluginBase):
     # 插件图标
     plugin_icon = "like.jpg"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -63,7 +63,7 @@ class FollowNotify(_PluginBase):
                 favor.pop(tmdb_id)
                 logger.info(f"{mediainfo.title_year} 取消更新通知")
                 self.chain.post_message(Notification(
-                    mtype=NotificationType.Manual,
+                    mtype=NotificationType.Plugin,
                     title=f"{mediainfo.title_year} 取消更新通知", text=None, image=mediainfo.get_message_image()))
             else:
                 favor[tmdb_id] = {
@@ -77,7 +77,7 @@ class FollowNotify(_PluginBase):
                 }
                 logger.info(f"{mediainfo.title_year} 加入更新通知")
                 self.chain.post_message(Notification(
-                    mtype=NotificationType.Manual,
+                    mtype=NotificationType.Plugin,
                     title=f"{mediainfo.title_year} 加入更新通知", text=None, image=mediainfo.get_message_image()))
             self.save_data('favor', favor)
         except Exception as e:
@@ -95,7 +95,7 @@ class FollowNotify(_PluginBase):
         if favor.get(tmdb_id) and mediainfo.type == MediaType.TV:
             # 发送消息
             self.chain.post_message(Notification(
-                mtype=NotificationType.Manual,
+                mtype=NotificationType.Plugin,
                 title=msg_title, text=None, image=mediainfo.get_message_image()))
             logger.info(f"发送通知 {msg_title}")
         else:

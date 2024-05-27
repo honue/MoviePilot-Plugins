@@ -69,7 +69,7 @@
   "FollowNotify": {
     "name": "收藏更新通知",
     "description": "在Emby上收藏剧集，当有新集更新时发送通知。适合针对性的获取剧集更新通知、榜单订阅时有不看的剧集不想收到更新通知。",
-    "version": "1.0",
+    "version": "1.1",
     "icon": "like.jpg",
     "author": "honue",
     "level": 1
