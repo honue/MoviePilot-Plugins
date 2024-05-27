@@ -119,7 +119,7 @@ class DouBanWatching(_PluginBase):
 
             douban_helper = DoubanHelper(user_cookie=self._cookie)
             subject_name, subject_id = douban_helper.get_subject_id(title=title)
-            logger.info(f"查询：{title} => 匹配豆瓣：{subject_name} https://movie.douban.com/subject/{subject_id}")
+            logger.info(f"查询：{title} => 匹配豆瓣：{subject_name} https://movie.douban.com/subject/{subject_id}/")
             if subject_id:
                 ret = douban_helper.set_watching_status(subject_id=subject_id, status=status, private=self._private)
                 if ret:
@@ -265,7 +265,15 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '需要开启媒体服务器的webhook，需要浏览器登录豆瓣，手动将cookie填写到此处（不异地登陆有效期很久），也可以将豆瓣的cookie同步到cookiecloud，v1.8应该解决了cookie失效的问题'
+                                            'text': '需要开启媒体服务器的webhook，需要浏览器登录豆瓣，将豆瓣的cookie同步到cookiecloud，也可以手动将cookie填写到此处（不异地登陆有效期很久）。'
+                                        }
+                                    },
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': 'v1.8解决了容易提示cookie失效，导致同步失败的问题，现在用cookiecloud应该不用填保活了'
                                         }
                                     }
                                 ]
