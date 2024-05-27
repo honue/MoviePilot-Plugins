@@ -59,7 +59,7 @@ class DouBanWatching(_PluginBase):
             logger.info(f"关键词排除媒体文件{path}")
             return
 
-        processed_items: Dict = self.get_data("marked") or self.get_date("processed") or {}
+        processed_items: Dict = self.get_data("marked") or self.get_data("processed") or {}
         if event_info.event in play_start and \
                 event_info.user_name in self._user.split(','):
             """

@@ -132,8 +132,15 @@ class DoubanHelper:
         if not response:
             return False
         if response.status_code == 200:
-            logger.debug(response.text)
-            return True
+            # 正常情况 {"r":0}
+            ret = response.json().get("r")
+            r = False if (isinstance(ret, bool) and ret is False) else True
+            if r:
+                return True
+            # 未开播 {"r": false}
+            else:
+                logger.error(f"douban_id: {subject_id} 未开播")
+                return False
         logger.error(response.text)
         return False
 
