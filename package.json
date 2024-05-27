@@ -24,7 +24,7 @@
   "DouBanWatching": {
     "name": "豆瓣书影音档案",
     "description": "将剧集在看、看完状态同步到豆瓣书影音档案",
-    "version": "1.8",
+    "version": "1.8.1",
     "history": {
       "v1.8": "解决了容易提示cookie失效，导致同步失败的问题，现在用cookiecloud应该不用填保活了"
     },
