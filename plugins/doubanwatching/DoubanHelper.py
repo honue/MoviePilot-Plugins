@@ -26,11 +26,7 @@ class DoubanHelper:
         self.cookies = {k: v.value for k, v in SimpleCookie(self.cookies).items()}
         if self.cookies.get('__utmz'):
             self.cookies.pop("__utmz")
-        self.ck = self.cookies.get('ck') or ""
-        logger.debug(f"ck:{self.ck} cookie:{self.cookies}")
 
-        if not self.cookies or not self.ck:
-            logger.error(f"豆瓣cookie错误 ck:{self.ck if self.ck else 'cookie提取ck获取失败'} cookies:{self.cookies}")
         self.headers = {
             'User-Agent': settings.USER_AGENT,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -40,6 +36,33 @@ class DoubanHelper:
             'DNT': '1',
             'HOST': 'www.douban.com'
         }
+
+        # 移除用户传进来的ck
+        if self.cookies.get('ck'):
+            self.cookies.pop("ck")
+
+        # 获取最新的ck
+        self.set_ck()
+
+        self.ck = self.cookies.get('ck')
+        logger.debug(f"ck:{self.ck} cookie:{self.cookies}")
+
+        if not self.cookies:
+            logger.error(f"cookie获取为空，请检查插件配置或cookie cloud")
+        if not self.ck:
+            logger.error(f"ck获取失败，检查传入的cookie登录状态")
+
+    def set_ck(self):
+        self.headers["Cookie"] = ";".join([f"{key}={value}" for key, value in self.cookies.items()])
+        response = requests.get("https://www.douban.com/", headers=self.headers)
+        ck_str = response.headers.get('Set-Cookie', '')
+        if not ck_str:
+            logger.error('获取ck失败，检查豆瓣登录状态')
+            self.cookies['ck'] = ''
+        cookie_parts = ck_str.split(";")
+        ck = cookie_parts[0].split("=")[1].strip()
+        logger.debug(ck)
+        self.cookies['ck'] = ck
 
     def get_subject_id(self, title: str = None, meta: MetaBase = None) -> Tuple | None:
         if not title:
