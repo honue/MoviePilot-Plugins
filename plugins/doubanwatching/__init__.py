@@ -1,4 +1,5 @@
-from typing import Dict, Any
+from datetime import datetime
+from typing import Dict, Any, List, Tuple
 
 from app.chain.media import MediaChain
 from app.core.event import eventmanager, Event
@@ -58,7 +59,7 @@ class DouBanWatching(_PluginBase):
             logger.info(f"关键词排除媒体文件{path}")
             return
 
-        processed_items: Dict = self.get_data("processed") or {}
+        processed_items: Dict = self.get_data("marked") or self.get_date("processed") or {}
         if event_info.event in play_start and \
                 event_info.user_name in self._user.split(','):
             """
@@ -123,8 +124,12 @@ class DouBanWatching(_PluginBase):
             if subject_id:
                 ret = douban_helper.set_watching_status(subject_id=subject_id, status=status, private=self._private)
                 if ret:
-                    processed_items[f"{title}"] = subject_id
-                    self.save_data("processed", processed_items)
+                    processed_items[f"{title}"] = {
+                        "subject_id": subject_id,
+                        "subject_name": subject_name,
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                    self.save_data("marked", processed_items)
                     logger.info(f"{title} 同步到档案成功")
                 else:
                     logger.info(f"{title} 同步到档案失败")
