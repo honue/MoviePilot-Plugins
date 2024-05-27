@@ -130,6 +130,7 @@ class DoubanHelper:
             headers=self.headers,
             data=data_json)
         if not response:
+            logger.error(response.text)
             return False
         if response.status_code == 200:
             # 正常情况 {"r":0}
