@@ -18,7 +18,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.8.2"
+    plugin_version = "1.8.3"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -58,8 +58,7 @@ class DouBanWatching(_PluginBase):
             logger.info(f"关键词排除媒体文件{path}")
             return
 
-        data_key = 'data'
-        processed_items: Dict = self.get_data(data_key) or {}
+        processed_items: Dict = self.get_data('data') or {}
 
         if event_info.event in play_start and \
                 event_info.user_name in self._user.split(','):
@@ -128,9 +127,10 @@ class DouBanWatching(_PluginBase):
                     processed_items[f"{title}"] = {
                         "subject_id": subject_id,
                         "subject_name": subject_name,
-                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "type": "电视剧" if event_info.item_type == "TV" else "电影"
                     }
-                    self.save_data(data_key, processed_items)
+                    self.save_data('data', processed_items)
                     logger.info(f"{title} 同步到档案成功")
                 else:
                     logger.info(f"{title} 同步到档案失败")
@@ -357,12 +357,16 @@ class DouBanWatching(_PluginBase):
         elements = [
             {
                 'component': 'VRow',
+                'props': {
+
+                },
                 'content': [
                     {
                         'component': 'VTimeline',
-                        'props': {'dot-color': '#AF85FD'},
+                        'props': {'dot-color': '#AF85FD', 'side': "end"},
                         "content": self.get_line_item()
-                    }]
+                    }
+                ]
             }
         ]
 
@@ -376,54 +380,61 @@ class DouBanWatching(_PluginBase):
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     }
         """
-        marked: dict = self.get_data("marked")
+        data: Dict = self.get_data('data') or {}
         content = []
-        for key, val in marked.items():
-            if isinstance(val, dict):
-                component = {
-                    "component": "VTimelineItem",
-                    "props": {
-                        "size": "large"
-                    },
-                    "content": [
-                        {
-                            "component": "VCard",
-                            "props": {
-                                "class": "elevation-2"
-                            },
-                            "content": [
-                                {
-                                    'component': 'VRow',
-                                    'content': [
-                                        {
-                                            "component": "VImg",
-                                            "props": {
-                                                "src": "http://localhost:3001/api/v1/douban/img?imgurl=https%3A%2F%2Fimg1.doubanio.com%2Fview%2Fphoto%2Fm_ratio_poster%2Fpublic%2Fp2905616828.webp",
-                                                "style": "height: 100px;",
-                                                "aspect-ratio": "2/3"
-                                            }
-                                        },
-                                        {
-                                            'component': 'VCol',
-                                            'content': [
-                                                {
-                                                    "component": "VCardTitle",
-                                                    "props": {
-                                                        "class": "text-h8",
-                                                    },
-                                                    "text": val.get("subject_name")
-                                                },
-                                                {
-                                                    "component": "VCardText",
-                                                    "text": val.get("timestamp")
-                                                }
-                                            ]
+        for key, val in list(data.items())[-2:]:
+            if not isinstance(val, dict):
+                continue
+
+            meta = MetaInfo(val.get("subject_name"))
+            meta.type = MediaType("电视剧" if not val.get("type", '') else val.get("type"))
+            # 识别媒体信息
+            mediainfo: MediaInfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
+                                                                cache=True)
+            content.append({
+                "component": "VTimelineItem",
+                "props": {
+                    "size": "large"
+                },
+                "content": [
+                    {
+                        "component": "VCard",
+                        "props": {
+                            "class": "elevation-2"
+                        },
+                        "content": [
+                            {
+                                'component': 'VCol',
+                                'content': [
+                                    {
+                                        "component": "VImg",
+                                        "props": {
+                                            "src": mediainfo.poster_path.replace("/original/", "/w200/"),
+                                            "style": "height: 100px;",
+                                            "aspect-ratio": "2/3"
                                         }
-                                    ]
-                                }
-                            ]
-                        }
-                    ]
-                }
-                content.append(component)
+                                    },
+                                    {
+                                        'component': 'VCol',
+                                        'content': [
+                                            {
+                                                "component": "VCardTitle",
+                                                "props": {
+                                                    "class": "text-h8",
+                                                },
+                                                "text": val.get("subject_name")
+                                            },
+                                            {
+                                                "component": "VCardText",
+                                                "text": val.get("timestamp")
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            })
+        logger.info(len(content))
         return content
