@@ -58,7 +58,7 @@ class DoubanHelper:
         response = requests.get("https://www.douban.com/", headers=self.headers)
         ck_str = response.headers.get('Set-Cookie', '')
         logger.debug(ck_str)
-        if not ck_str or ck_str.find('ck="deleted"') < 0:
+        if not ck_str:
             logger.error('获取ck失败，检查豆瓣登录状态')
             self.cookies['ck'] = ''
             return
