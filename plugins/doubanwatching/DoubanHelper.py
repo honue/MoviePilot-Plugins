@@ -24,8 +24,6 @@ class DoubanHelper:
         else:
             self.cookies = user_cookie
         self.cookies = {k: v.value for k, v in SimpleCookie(self.cookies).items()}
-        if self.cookies.get('__utmz'):
-            self.cookies.pop("__utmz")
 
         self.headers = {
             'User-Agent': settings.USER_AGENT,
@@ -37,7 +35,10 @@ class DoubanHelper:
             'HOST': 'www.douban.com'
         }
 
-        # 移除用户传进来的ck
+        if self.cookies.get('__utmz'):
+            self.cookies.pop("__utmz")
+
+        # 移除用户传进来的comment-key
         if self.cookies.get('ck'):
             self.cookies.pop("ck")
 
@@ -50,15 +51,17 @@ class DoubanHelper:
         if not self.cookies:
             logger.error(f"cookie获取为空，请检查插件配置或cookie cloud")
         if not self.ck:
-            logger.error(f"ck获取失败，检查传入的cookie登录状态")
+            logger.error(f"请求ck失败，请检查传入的cookie登录状态")
 
     def set_ck(self):
         self.headers["Cookie"] = ";".join([f"{key}={value}" for key, value in self.cookies.items()])
         response = requests.get("https://www.douban.com/", headers=self.headers)
         ck_str = response.headers.get('Set-Cookie', '')
-        if not ck_str:
+        logger.debug(ck_str)
+        if not ck_str or ck_str.find('ck="deleted"') < 0:
             logger.error('获取ck失败，检查豆瓣登录状态')
             self.cookies['ck'] = ''
+            return
         cookie_parts = ck_str.split(";")
         ck = cookie_parts[0].split("=")[1].strip()
         logger.debug(ck)
@@ -130,7 +133,6 @@ class DoubanHelper:
             headers=self.headers,
             data=data_json)
         if not response:
-            logger.error(response.text)
             return False
         if response.status_code == 200:
             # 正常情况 {"r":0}

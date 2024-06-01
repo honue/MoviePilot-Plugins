@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, Optional
 
 from app.chain.media import MediaChain
 from app.core.event import eventmanager, Event
@@ -8,7 +8,6 @@ from app.plugins import _PluginBase
 from app.plugins.doubanwatching.DoubanHelper import *
 from app.schemas import WebhookEventInfo, MediaInfo
 from app.schemas.types import EventType, MediaType
-from app.log import logger
 
 
 class DouBanWatching(_PluginBase):
@@ -19,7 +18,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.8.1"
+    plugin_version = "1.8.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -59,7 +58,9 @@ class DouBanWatching(_PluginBase):
             logger.info(f"关键词排除媒体文件{path}")
             return
 
-        processed_items: Dict = self.get_data("marked") or self.get_data("processed") or {}
+        data_key = 'data'
+        processed_items: Dict = self.get_data(data_key) or {}
+
         if event_info.event in play_start and \
                 event_info.user_name in self._user.split(','):
             """
@@ -127,9 +128,9 @@ class DouBanWatching(_PluginBase):
                     processed_items[f"{title}"] = {
                         "subject_id": subject_id,
                         "subject_name": subject_name,
-                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     }
-                    self.save_data("marked", processed_items)
+                    self.save_data(data_key, processed_items)
                     logger.info(f"{title} 同步到档案成功")
                 else:
                     logger.info(f"{title} 同步到档案失败")
@@ -328,3 +329,101 @@ class DouBanWatching(_PluginBase):
 
     def get_api(self) -> List[Dict[str, Any]]:
         pass
+
+    def get_dashboard(self, **kwargs) -> Optional[Tuple[Dict[str, Any], Dict[str, Any], List[dict]]]:
+        """
+        获取插件仪表盘页面，需要返回：1、仪表板col配置字典；2、全局配置（自动刷新等）；3、仪表板页面元素配置json（含数据）
+        1、col配置参考：
+        {
+            "cols": 12, "md": 6
+        }
+        2、全局配置参考：
+        {
+            "refresh": 10, // 自动刷新时间，单位秒
+            "border": True, // 是否显示边框，默认True，为False时取消组件边框和边距，由插件自行控制
+            "title": "组件标题", // 组件标题，如有将显示该标题，否则显示插件名称
+            "subtitle": "组件子标题", // 组件子标题，缺省时不展示子标题
+        }
+        3、页面配置使用Vuetify组件拼装，参考：https://vuetifyjs.com/
+
+        kwargs参数可获取的值：1、user_agent：浏览器UA
+
+        :param key: 仪表盘key，根据指定的key返回相应的仪表盘数据，缺省时返回一个固定的仪表盘数据（兼容旧版）
+        """
+        cols = {
+            "cols": 12, "md": 6
+        }
+        attrs = {"refresh": 600, "border": True}
+        elements = [
+            {
+                'component': 'VRow',
+                'content': [
+                    {
+                        'component': 'VTimeline',
+                        'props': {'dot-color': '#AF85FD'},
+                        "content": self.get_line_item()
+                    }]
+            }
+        ]
+
+        return cols, attrs, elements
+
+    def get_line_item(self):
+        """
+        processed_items[f"{title}"] = {
+                        "subject_id": subject_id,
+                        "subject_name": subject_name,
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+        """
+        marked: dict = self.get_data("marked")
+        content = []
+        for key, val in marked.items():
+            if isinstance(val, dict):
+                component = {
+                    "component": "VTimelineItem",
+                    "props": {
+                        "size": "large"
+                    },
+                    "content": [
+                        {
+                            "component": "VCard",
+                            "props": {
+                                "class": "elevation-2"
+                            },
+                            "content": [
+                                {
+                                    'component': 'VRow',
+                                    'content': [
+                                        {
+                                            "component": "VImg",
+                                            "props": {
+                                                "src": "http://localhost:3001/api/v1/douban/img?imgurl=https%3A%2F%2Fimg1.doubanio.com%2Fview%2Fphoto%2Fm_ratio_poster%2Fpublic%2Fp2905616828.webp",
+                                                "style": "height: 100px;",
+                                                "aspect-ratio": "2/3"
+                                            }
+                                        },
+                                        {
+                                            'component': 'VCol',
+                                            'content': [
+                                                {
+                                                    "component": "VCardTitle",
+                                                    "props": {
+                                                        "class": "text-h8",
+                                                    },
+                                                    "text": val.get("subject_name")
+                                                },
+                                                {
+                                                    "component": "VCardText",
+                                                    "text": val.get("timestamp")
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+                content.append(component)
+        return content
