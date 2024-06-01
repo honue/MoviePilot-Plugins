@@ -386,10 +386,10 @@ class DouBanWatching(_PluginBase):
         """
         data: Dict = self.get_data('data') or {}
         content = []
+        logger.info(' ')
         for key, val in list(data.items())[-num:][::-1]:
             if not isinstance(val, dict):
                 continue
-
             meta = MetaInfo(val.get("subject_name"))
             meta.type = MediaType("电视剧" if not val.get("type", '') else val.get("type"))
             # 识别媒体信息
