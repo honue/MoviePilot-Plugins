@@ -18,7 +18,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.8.3"
+    plugin_version = "1.8.4"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -354,17 +354,21 @@ class DouBanWatching(_PluginBase):
             "cols": 12, "md": 6
         }
         attrs = {"refresh": 600, "border": True}
+        num = 2 if self.is_mobile(kwargs.get('user_agent')) else 3
         elements = [
             {
                 'component': 'VRow',
                 'props': {
-
                 },
                 'content': [
                     {
                         'component': 'VTimeline',
-                        'props': {'dot-color': '#AF85FD', 'side': "end"},
-                        "content": self.get_line_item()
+                        'props': {
+                            'dot-color': '#AF85FD',
+                            'direction': "horizontal",
+                            'style': 'padding: 1rem 1rem 1rem 1rem',
+                        },
+                        "content": self.get_line_item(num)
                     }
                 ]
             }
@@ -372,7 +376,7 @@ class DouBanWatching(_PluginBase):
 
         return cols, attrs, elements
 
-    def get_line_item(self):
+    def get_line_item(self, num: int = 2) -> dict:
         """
         processed_items[f"{title}"] = {
                         "subject_id": subject_id,
@@ -382,7 +386,7 @@ class DouBanWatching(_PluginBase):
         """
         data: Dict = self.get_data('data') or {}
         content = []
-        for key, val in list(data.items())[-2:]:
+        for key, val in list(data.items())[-num:][::-1]:
             if not isinstance(val, dict):
                 continue
 
@@ -394,39 +398,36 @@ class DouBanWatching(_PluginBase):
             content.append({
                 "component": "VTimelineItem",
                 "props": {
-                    "size": "large"
+                    "size": "small",
                 },
                 "content": [
                     {
-                        "component": "VCard",
-                        "props": {
-                            "class": "elevation-2"
+                        "component": "a",
+                        'props': {
+                            'href': 'https://www.douban.com/doubanapp/dispatch?uri=/movie/' + val.get(
+                                'subject_id') + '?from=mdouban&open=app',
+                            'target': '_blank'
                         },
                         "content": [
                             {
-                                'component': 'VCol',
-                                'content': [
-                                    {
-                                        "component": "VImg",
-                                        "props": {
-                                            "src": mediainfo.poster_path.replace("/original/", "/w200/"),
-                                            "style": "height: 100px;",
-                                            "aspect-ratio": "2/3"
-                                        }
-                                    },
+                                "component": "VCard",
+                                "props": {
+                                    "class": "elevation-4"
+                                },
+                                "content": [
                                     {
                                         'component': 'VCol',
+                                        'props': {
+                                            'style': 'padding: 0rem 0rem 0rem 0rem'
+                                        },
                                         'content': [
                                             {
-                                                "component": "VCardTitle",
+                                                "component": "VImg",
                                                 "props": {
-                                                    "class": "text-h8",
-                                                },
-                                                "text": val.get("subject_name")
-                                            },
-                                            {
-                                                "component": "VCardText",
-                                                "text": val.get("timestamp")
+                                                    "src": mediainfo.poster_path.replace("/original/", "/w200/"),
+                                                    "style": "width:100px; height: 150px;",
+                                                    "aspect-ratio": "2/3"
+                                                }
                                             }
                                         ]
                                     }
@@ -436,5 +437,14 @@ class DouBanWatching(_PluginBase):
                     }
                 ]
             })
-        logger.info(len(content))
         return content
+
+    @staticmethod
+    def is_mobile(user_agent):
+        mobile_keywords = [
+            'Mobile', 'Android', 'Silk/', 'Kindle', 'BlackBerry', 'Opera Mini', 'Opera Mobi', 'iPhone', 'iPad'
+        ]
+        for keyword in mobile_keywords:
+            if re.search(keyword, user_agent, re.IGNORECASE):
+                return True
+        return False
