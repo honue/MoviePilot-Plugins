@@ -18,7 +18,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.8.5"
+    plugin_version = "1.8.6"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -107,10 +107,23 @@ class DouBanWatching(_PluginBase):
                 if processed_items.get(title) and len(episodes) != episode_id:
                     logger.info(f"{title} 已同步到豆瓣在看，不处理")
                     return
+
             # 处理电影
             else:
                 title = event_info.item_name
                 status = "collect"
+                meta = MetaInfo(title)
+                meta.type = MediaType("电视剧" if event_info.item_type == "TV" else "电影")
+                # 识别媒体信息
+                mediainfo: MediaInfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
+                                                                    tmdbid=event_info.tmdb_id,
+                                                                    cache=True)
+                if not mediainfo:
+                    logger.warn(
+                        f'标题：{title}，tmdbid：{event_info.tmdb_id}，指定tmdbid未识别到媒体信息，尝试仅使用标题识别')
+                    meta.tmdbid = None
+                    mediainfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
+                                                             cache=False)
 
                 if processed_items.get(title):
                     logger.info(f"{title} 已同步到豆瓣在看，不处理")
@@ -128,6 +141,7 @@ class DouBanWatching(_PluginBase):
                         "subject_id": subject_id,
                         "subject_name": subject_name,
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "poster_path": mediainfo.poster_path,
                         "type": "电视剧" if event_info.item_type == "TV" else "电影"
                     }
                     self.save_data('data', processed_items)
@@ -390,11 +404,16 @@ class DouBanWatching(_PluginBase):
         for key, val in list(data.items())[-num:][::-1]:
             if not isinstance(val, dict):
                 continue
-            meta = MetaInfo(val.get("subject_name"))
-            meta.type = MediaType("电视剧" if not val.get("type", '') else val.get("type"))
-            # 识别媒体信息
-            mediainfo: MediaInfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
-                                                                cache=True)
+            if not val.get('poster_path', ''):
+                meta = MetaInfo(val.get("subject_name"))
+                meta.type = MediaType("电视剧" if not val.get("type", '') else val.get("type"))
+                # 识别媒体信息
+                mediainfo: MediaInfo = MediaChain().recognize_media(meta=meta, mtype=meta.type,
+                                                                    cache=True)
+                poster_path = mediainfo.poster_path
+            else:
+                poster_path = val.get('poster_path')
+
             content.append({
                 "component": "VTimelineItem",
                 "props": {
@@ -424,7 +443,7 @@ class DouBanWatching(_PluginBase):
                                             {
                                                 "component": "VImg",
                                                 "props": {
-                                                    "src": mediainfo.poster_path.replace("/original/", "/w200/"),
+                                                    "src": poster_path.replace("/original/", "/w200/"),
                                                     "style": "width:100px; height: 150px;",
                                                     "aspect-ratio": "2/3"
                                                 }
