@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, List
 
@@ -11,16 +12,18 @@ from app.schemas.types import EventType, MediaType
 import re
 from app.log import logger
 
+lock = threading.Lock()
+
 
 class DouBanWatching(_PluginBase):
     # 插件名称
     plugin_name = "豆瓣书影音档案"
     # 插件描述
-    plugin_desc = "将剧集电影的在看、看完状态同步到豆瓣书影音档案"
+    plugin_desc = "将剧集电影的在看、看完状态同步到豆瓣书影音档案，支持标记同步，播放自动同步。"
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.8.9"
+    plugin_version = "1.8.10"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -51,31 +54,43 @@ class DouBanWatching(_PluginBase):
         self._cookie = config.get("cookie", "")
 
     @eventmanager.register(EventType.WebhookMessage)
-    def sync_log(self, event: Event):
+    def sync_log(self, event: Event, played: bool = False):
         event_info: WebhookEventInfo = event.event_data
         play_start = {"playback.start", "media.play", "PlaybackStart"}
         path = event_info.item_path
         processed_items: Dict = self.get_data('data') or {}
 
-        if event_info.event in play_start and event_info.user_name in self._user.split(','):
+        if (event_info.event in play_start and event_info.user_name in self._user.split(',')) or played:
             logger.info(" ")
+            if played:
+                logger.info(f"标记播放完成 {event_info.item_name}")
 
             if not self.exclude_keyword(path=path, keywords=self._exclude).get("ret", False):
                 logger.info(self.exclude_keyword(path=path, keywords=self._exclude).get("message", ""))
                 return
 
             if event_info.item_type == "TV":
-                self._process_tv_show(event_info, processed_items)
+                self._process_tv_show(event_info, processed_items, played=played)
             else:
-                self._process_movie(event_info, processed_items)
+                self._process_movie(event_info, processed_items, played=played)
 
-    def _process_tv_show(self, event_info: WebhookEventInfo, processed_items: Dict):
+    @eventmanager.register(EventType.WebhookMessage)
+    def sync_played(self, event: Event):
+        event_info: WebhookEventInfo = event.event_data
+        played = {'item.markplayed', 'media.scrobble'}
+
+        if event_info.event in played and event_info.user_name in self._user.split(','):
+            with lock:
+                self.sync_log(event=event, played=True)
+
+    def _process_tv_show(self, event_info: WebhookEventInfo, processed_items: Dict, played: bool = False):
         index = event_info.item_name.index(" S")
         title = event_info.item_name[:index]
         season_id, episode_id = map(int, [event_info.season_id, event_info.episode_id])
         tmdb_id = event_info.tmdb_id
 
-        logger.info(f"开始播放 {title} 第{season_id}季 第{episode_id}集")
+        if not played:
+            logger.info(f"开始播放 {title} 第{season_id}季 第{episode_id}集")
 
         if episode_id < 2 and self._first:
             logger.info(f"剧集第1集的活动不同步到豆瓣档案，跳过")
@@ -102,8 +117,12 @@ class DouBanWatching(_PluginBase):
 
         self._sync_to_douban(title, status, event_info, processed_items, mediainfo)
 
-    def _process_movie(self, event_info: WebhookEventInfo, processed_items: Dict):
+    def _process_movie(self, event_info: WebhookEventInfo, processed_items: Dict, played: bool = False):
         title = event_info.item_name
+
+        if not played:
+            logger.info(f"开始播放 {title}")
+
         meta = MetaInfo(title)
         meta.type = MediaType("电影")
         mediainfo = self._recognize_media(meta, event_info.tmdb_id)
