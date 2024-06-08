@@ -461,7 +461,7 @@ class DouBanWatching(_PluginBase):
                 current_month_item = {
                     "component": "VTimelineItem",
                     "props": {
-                        "size": "small",
+                        "size": "x-small",
                     },
                     "content": [
                         {
