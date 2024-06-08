@@ -412,7 +412,7 @@ class DouBanWatching(_PluginBase):
 
         return cols, attrs, elements
 
-    def get_line_item(self):
+    def get_line_item(self, month_num: int):
         """
         processed_items[f"{title}"] = {
                         "subject_id": subject_id,
@@ -427,7 +427,7 @@ class DouBanWatching(_PluginBase):
         last_month = None
         current_month_item = None
         # 限制只显示两个月的
-        limit_month = 2
+        limit_month = month_num
         limit_month -= 1
 
         for key, val in list(data.items())[::-1]:
