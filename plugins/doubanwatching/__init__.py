@@ -400,7 +400,9 @@ class DouBanWatching(_PluginBase):
                             'dot-color': '#AF85FD',
                             'direction': "vertical",
                             'style': 'padding: 1rem 1rem 1rem 1rem',
-                            'side': 'end'
+                            'hide-opposite': True,
+                            'side': 'end',
+                            'align': 'start'
                         },
                         "content": self.get_line_item()
                     }
@@ -451,8 +453,11 @@ class DouBanWatching(_PluginBase):
 
             if time_object.month != last_month or last_month is None:
                 if last_month:
+                    num_movies = len(current_month_item["content"][0]["content"][1]["content"])
+                    current_month_item["content"][0]["content"][0]["text"] += f'看过{num_movies}部'
                     content.append(current_month_item)
                     limit_month -= 1
+                # 初始化 current_month_item 模板
                 current_month_item = {
                     "component": "VTimelineItem",
                     "props": {
@@ -470,7 +475,7 @@ class DouBanWatching(_PluginBase):
                                     'props': {
                                         'style': 'padding:0rem 0rem 1rem 0rem;font-weight: bold;'
                                     },
-                                    'text': f'{time_object.month}月'
+                                    'text': f'{time_object.month}月 '
                                 },
                                 {
                                     'component': 'VRow',
@@ -493,7 +498,7 @@ class DouBanWatching(_PluginBase):
                     'target': '_blank',
                     # 图片卡片间的间距 上 右 下 左
                     # 'style': 'padding: 1rem 0.5rem 1rem 0.5rem'
-                    'style': 'padding: 0.3rem'
+                    'style': 'padding: 0.2rem'
                 },
                 "content": [
                     {
@@ -503,26 +508,20 @@ class DouBanWatching(_PluginBase):
                         },
                         "content": [
                             {
-                                'component': 'VCol',
-                                'props': {
-                                    'style': 'padding: 0rem 0rem 0rem 0rem'
-                                },
-                                'content': [
-                                    {
-                                        "component": "VImg",
-                                        "props": {
-                                            "src": poster_path.replace("/original/", "/w200/"),
-                                            "style": "width:55px; height: 82.5px;",
-                                            "aspect-ratio": "2/3"
-                                        }
-                                    }
-                                ]
+                                "component": "VImg",
+                                "props": {
+                                    "src": poster_path.replace("/original/", "/w200/"),
+                                    "style": "width:44px; height: 66px;",
+                                    "aspect-ratio": "2/3"
+                                }
                             }
                         ]
                     }
                 ]
             })
 
+        num_movies = len(current_month_item["content"][0]["content"][1]["content"])
+        current_month_item["content"][0]["content"][0]["text"] += f'看过{num_movies}部'
         content.append(current_month_item)
         return content
 
