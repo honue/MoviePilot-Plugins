@@ -35,12 +35,10 @@ class DoubanHelper:
             'HOST': 'www.douban.com'
         }
 
-        if self.cookies.get('__utmz'):
-            self.cookies.pop("__utmz")
+        self.cookies.pop("__utmz", None)
 
         # 移除用户传进来的comment-key
-        if self.cookies.get('ck'):
-            self.cookies.pop("ck")
+        self.cookies.pop("ck", None)
 
         # 获取最新的ck
         self.set_ck()
@@ -59,13 +57,15 @@ class DoubanHelper:
         ck_str = response.headers.get('Set-Cookie', '')
         logger.debug(ck_str)
         if not ck_str:
-            logger.error('获取ck失败，检查豆瓣登录状态')
             self.cookies['ck'] = ''
             return
         cookie_parts = ck_str.split(";")
         ck = cookie_parts[0].split("=")[1].strip()
         logger.debug(ck)
-        self.cookies['ck'] = ck
+        if ck == '"deleted"':
+            self.cookies['ck'] = ''
+        else:
+            self.cookies['ck'] = ck
 
     def get_subject_id(self, title: str = None, meta: MetaBase = None) -> Tuple | None:
         if not title:
@@ -133,6 +133,7 @@ class DoubanHelper:
             headers=self.headers,
             data=data_json)
         if not response:
+            logger.error(response.text)
             return False
         if response.status_code == 200:
             # 正常情况 {"r":0}
