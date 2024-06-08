@@ -20,7 +20,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.8.7"
+    plugin_version = "1.8.8"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -280,7 +280,7 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '需要开启媒体服务器的webhook，需要浏览器登录豆瓣，将豆瓣的cookie同步到cookiecloud，也可以手动将cookie填写到此处（不异地登陆有效期很久）。'
+                                            'text': '需要开启媒体服务器的webhook，需要浏览器登录豆瓣，将豆瓣的cookie同步到cookiecloud，也可以手动将cookie填写到此处，不异地登陆有效期很久。'
                                         }
                                     }
                                 ]
@@ -296,7 +296,22 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': 'v1.8+ 解决了容易提示cookie失效，导致同步失败的问题，现在用cookiecloud应该不用填保活了'
+                                            'text': 'v1.8+ 解决了容易提示cookie失效，导致同步失败的问题，现在用cookiecloud应该不用填保活了,建议使用cookiecloud'
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': ' 因小组件(v1.8.7+) 所需数据变更，建议重置一下插件。'
                                         }
                                     }
                                 ]
@@ -350,10 +365,10 @@ class DouBanWatching(_PluginBase):
 
     def get_dashboard(self, **kwargs) -> Optional[Tuple[Dict[str, Any], Dict[str, Any], List[dict]]]:
         cols = {
-            "cols": 12, "md": 6
+            "cols": 12, "md": 4
         }
         attrs = {"refresh": 600, "border": True}
-        num = 2 if self.is_mobile(kwargs.get('user_agent')) else 3
+        # num = 100 if self.is_mobile(kwargs.get('user_agent')) else 100
         elements = [
             {
                 'component': 'VRow',
@@ -364,10 +379,11 @@ class DouBanWatching(_PluginBase):
                         'component': 'VTimeline',
                         'props': {
                             'dot-color': '#AF85FD',
-                            'direction': "horizontal",
+                            'direction': "vertical",
                             'style': 'padding: 1rem 1rem 1rem 1rem',
+                            'side': 'end'
                         },
-                        "content": self.get_line_item(num)
+                        "content": self.get_line_item()
                     }
                 ]
             }
@@ -375,7 +391,7 @@ class DouBanWatching(_PluginBase):
 
         return cols, attrs, elements
 
-    def get_line_item(self, num: int = 2):
+    def get_line_item(self):
         """
         processed_items[f"{title}"] = {
                         "subject_id": subject_id,
@@ -385,7 +401,15 @@ class DouBanWatching(_PluginBase):
         """
         data: Dict = self.get_data('data') or {}
         content = []
-        for key, val in list(data.items())[-num:][::-1]:
+
+        # 按月分组
+        last_month = None
+        current_month_item = None
+        # 限制只显示两个月的
+        limit_month = 2
+        limit_month -= 1
+
+        for key, val in list(data.items())[::-1]:
             if not isinstance(val, dict):
                 continue
             if not val.get('poster_path', ''):
@@ -401,41 +425,77 @@ class DouBanWatching(_PluginBase):
             else:
                 poster_path = val.get('poster_path')
 
-            content.append({
-                "component": "VTimelineItem",
-                "props": {
-                    "size": "small",
+            time_object = datetime.strptime(val.get('timestamp'), "%Y-%m-%d %H:%M:%S")
+
+            if limit_month < 1:
+                break
+
+            if time_object.month != last_month or last_month is None:
+                if last_month:
+                    content.append(current_month_item)
+                    limit_month -= 1
+                current_month_item = {
+                    "component": "VTimelineItem",
+                    "props": {
+                        "size": "small",
+                    },
+                    "content": [
+                        {
+                            "component": "VCol",
+                            'props': {
+                                'style': 'padding: 0rem 0rem 0rem 0rem'
+                            },
+                            'content': [
+                                {
+                                    'component': 'h5',
+                                    'props': {
+                                        'style': 'padding:0rem 0rem 1rem 0rem;font-weight: bold;'
+                                    },
+                                    'text': f'{time_object.month}月'
+                                },
+                                {
+                                    'component': 'VRow',
+                                    'props': {
+                                        'style': 'padding: 0rem 0rem 0rem 0rem'
+                                    },
+                                    'content': []
+                                }
+                            ]
+                        }
+                    ]
+                }
+                last_month = time_object.month
+
+            current_month_item["content"][0]["content"][1]["content"].append({
+                "component": "a",
+                'props': {
+                    'href': 'https://www.douban.com/doubanapp/dispatch?uri=/movie/' + val.get(
+                        'subject_id') + '?from=mdouban&open=app',
+                    'target': '_blank',
+                    # 图片卡片间的间距 上 右 下 左
+                    # 'style': 'padding: 1rem 0.5rem 1rem 0.5rem'
+                    'style': 'padding: 0.3rem'
                 },
                 "content": [
                     {
-                        "component": "a",
-                        'props': {
-                            'href': 'https://www.douban.com/doubanapp/dispatch?uri=/movie/' + val.get(
-                                'subject_id') + '?from=mdouban&open=app',
-                            'target': '_blank'
+                        "component": "VCard",
+                        "props": {
+                            "class": "elevation-4"
                         },
                         "content": [
                             {
-                                "component": "VCard",
-                                "props": {
-                                    "class": "elevation-4"
+                                'component': 'VCol',
+                                'props': {
+                                    'style': 'padding: 0rem 0rem 0rem 0rem'
                                 },
-                                "content": [
+                                'content': [
                                     {
-                                        'component': 'VCol',
-                                        'props': {
-                                            'style': 'padding: 0rem 0rem 0rem 0rem'
-                                        },
-                                        'content': [
-                                            {
-                                                "component": "VImg",
-                                                "props": {
-                                                    "src": poster_path.replace("/original/", "/w200/"),
-                                                    "style": "width:100px; height: 150px;",
-                                                    "aspect-ratio": "2/3"
-                                                }
-                                            }
-                                        ]
+                                        "component": "VImg",
+                                        "props": {
+                                            "src": poster_path.replace("/original/", "/w200/"),
+                                            "style": "width:44px; height: 66px;",
+                                            "aspect-ratio": "2/3"
+                                        }
                                     }
                                 ]
                             }
@@ -443,6 +503,8 @@ class DouBanWatching(_PluginBase):
                     }
                 ]
             })
+
+        content.append(current_month_item)
         return content
 
     @staticmethod
