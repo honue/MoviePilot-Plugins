@@ -387,7 +387,7 @@ class DouBanWatching(_PluginBase):
             "cols": 12, "md": 12
         }
         attrs = {"refresh": 600, "border": True}
-        # num = 100 if self.is_mobile(kwargs.get('user_agent')) else 100
+        month_num = 2 if self.is_mobile(kwargs.get('user_agent')) else 12
         elements = [
             {
                 'component': 'VRow',
@@ -404,7 +404,7 @@ class DouBanWatching(_PluginBase):
                             'side': 'end',
                             'align': 'start'
                         },
-                        "content": self.get_line_item()
+                        "content": self.get_line_item(month_num)
                     }
                 ]
             }
