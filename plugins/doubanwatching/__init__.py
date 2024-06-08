@@ -493,7 +493,7 @@ class DouBanWatching(_PluginBase):
                                         "component": "VImg",
                                         "props": {
                                             "src": poster_path.replace("/original/", "/w200/"),
-                                            "style": "width:44px; height: 66px;",
+                                            "style": "width:55px; height: 82.5px;",
                                             "aspect-ratio": "2/3"
                                         }
                                     }
