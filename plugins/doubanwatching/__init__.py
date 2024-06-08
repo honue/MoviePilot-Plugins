@@ -23,7 +23,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.8.10"
+    plugin_version = "1.9.0"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -384,7 +384,7 @@ class DouBanWatching(_PluginBase):
 
     def get_dashboard(self, **kwargs) -> Optional[Tuple[Dict[str, Any], Dict[str, Any], List[dict]]]:
         cols = {
-            "cols": 12, "md": 4
+            "cols": 12, "md": 12
         }
         attrs = {"refresh": 600, "border": True}
         # num = 100 if self.is_mobile(kwargs.get('user_agent')) else 100
