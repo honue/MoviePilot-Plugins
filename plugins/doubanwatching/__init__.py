@@ -19,7 +19,7 @@ class DouBanWatching(_PluginBase):
     # 插件名称
     plugin_name = "豆瓣书影音档案"
     # 插件描述
-    plugin_desc = "将剧集电影的在看、看完状态同步到豆瓣书影音档案，支持标记同步，播放自动同步。"
+    plugin_desc = "将剧集电影的在看、看完状态同步到豆瓣书影音档案。"
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
@@ -315,7 +315,7 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': 'v1.8+ 解决了容易提示cookie失效，导致同步失败的问题，现在用cookiecloud应该不用填保活了,建议使用cookiecloud'
+                                            'text': 'v1.8+ 解决了容易提示cookie失效，导致同步失败的问题，现在用cookiecloud应该不用填保活了,建议使用cookiecloud。'
                                         }
                                     }
                                 ]
@@ -330,7 +330,15 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': ' 因小组件(v1.8.7+) 所需数据变更，建议重置一下插件。'
+                                            'text': '因小组件(v1.8.7+) 所需数据变更，建议重置一下插件。'
+                                        }
+                                    },
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': 'v1.9.0 支持标记已观看同步，播放自动同步。'
                                         }
                                     }
                                 ]
