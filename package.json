@@ -10,8 +10,9 @@
   "AdaptiveIntroSkip": {
     "name": "自适应IntroSkip",
     "description": "通过用户的暂停与播放动作，批量标记片头片尾",
-    "version": "1.6",
+    "version": "1.7",
     "history": {
+      "v1.7": "fix: 新入库剧集标记片头的一些错误，如遇到问题请重置插件。",
       "v1.6": "(火柴总定制版)",
       "v1.5": "时间支持 分:秒 格式",
       "v1.4": "增加用户事件筛选"
@@ -22,8 +23,18 @@
   },
   "DouBanWatching": {
     "name": "豆瓣书影音档案",
-    "description": "将剧集在看、看完状态同步到豆瓣书影音档案",
-    "version": "1.8",
+    "description": "将剧集在看、看完状态同步到豆瓣书影音档案，支持标记同步，播放自动同步。",
+    "version": "1.9.0",
+    "history": {
+      "v1.9.0": "UI更新",
+      "v1.8.10": "支持标记触发同步，不用再手动打开视频同步一些已经看过的，想同步的视频。",
+      "v1.8.9": "完善报错信息",
+      "v1.8.8": "小组件样式优化",
+      "v1.8.7": "重构了下，应该没啥问题",
+      "v1.8.4": "微调了下小组件UI，图片点击可跳转豆瓣，mp不支持slot UI好难调，开摆！",
+      "v1.8.3": "支持仪表盘组件，现在样式还有点问题，之后再调整",
+      "v1.8": "解决了容易提示cookie失效，导致同步失败的问题，现在用cookiecloud应该不用填保活了"
+    },
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/douban.png",
     "author": "honue",
     "history": {
@@ -47,8 +58,10 @@
   "CleanLogs": {
     "name": "插件日志清理",
     "description": "定时清理插件产生的日志",
-    "version": "0.2",
+    "version": "1.1",
     "history": {
+      "v1.1": "t佬看不下去了，决定亲自出手",
+      "v1.0": "插件选择列表优化",
       "v0.2": "好像删错了...，删除逻辑应该是保留末尾{row}行。"
     },
     "icon": "clean.png",
@@ -66,7 +79,7 @@
   "FollowNotify": {
     "name": "收藏更新通知",
     "description": "在Emby上收藏剧集，当有新集更新时发送通知。适合针对性的获取剧集更新通知、榜单订阅时有不看的剧集不想收到更新通知。",
-    "version": "1.0",
+    "version": "1.1",
     "icon": "like.jpg",
     "author": "honue",
     "level": 1

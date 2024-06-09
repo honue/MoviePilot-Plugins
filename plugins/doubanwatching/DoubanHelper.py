@@ -24,13 +24,7 @@ class DoubanHelper:
         else:
             self.cookies = user_cookie
         self.cookies = {k: v.value for k, v in SimpleCookie(self.cookies).items()}
-        if self.cookies.get('__utmz'):
-            self.cookies.pop("__utmz")
-        self.ck = self.cookies.get('ck') or ""
-        logger.debug(f"ck:{self.ck} cookie:{self.cookies}")
 
-        if not self.cookies or not self.ck:
-            logger.error(f"豆瓣cookie错误 ck:{self.ck if self.ck else 'cookie提取ck获取失败'} cookies:{self.cookies}")
         self.headers = {
             'User-Agent': settings.USER_AGENT,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -40,6 +34,38 @@ class DoubanHelper:
             'DNT': '1',
             'HOST': 'www.douban.com'
         }
+
+        self.cookies.pop("__utmz", None)
+
+        # 移除用户传进来的comment-key
+        self.cookies.pop("ck", None)
+
+        # 获取最新的ck
+        self.set_ck()
+
+        self.ck = self.cookies.get('ck')
+        logger.debug(f"ck:{self.ck} cookie:{self.cookies}")
+
+        if not self.cookies:
+            logger.error(f"cookie获取为空，请检查插件配置或cookie cloud")
+        if not self.ck:
+            logger.error(f"请求ck失败，请检查传入的cookie登录状态")
+
+    def set_ck(self):
+        self.headers["Cookie"] = ";".join([f"{key}={value}" for key, value in self.cookies.items()])
+        response = requests.get("https://www.douban.com/", headers=self.headers)
+        ck_str = response.headers.get('Set-Cookie', '')
+        logger.debug(ck_str)
+        if not ck_str:
+            self.cookies['ck'] = ''
+            return
+        cookie_parts = ck_str.split(";")
+        ck = cookie_parts[0].split("=")[1].strip()
+        logger.debug(ck)
+        if ck == '"deleted"':
+            self.cookies['ck'] = ''
+        else:
+            self.cookies['ck'] = ck
 
     def get_subject_id(self, title: str = None, meta: MetaBase = None) -> Tuple | None:
         if not title:
@@ -107,10 +133,18 @@ class DoubanHelper:
             headers=self.headers,
             data=data_json)
         if not response:
+            logger.error(response.text)
             return False
         if response.status_code == 200:
-            logger.debug(response.text)
-            return True
+            # 正常情况 {"r":0}
+            ret = response.json().get("r")
+            r = False if (isinstance(ret, bool) and ret is False) else True
+            if r:
+                return True
+            # 未开播 {"r": false}
+            else:
+                logger.error(f"douban_id: {subject_id} 未开播")
+                return False
         logger.error(response.text)
         return False
 
