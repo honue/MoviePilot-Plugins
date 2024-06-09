@@ -386,8 +386,8 @@ class DouBanWatching(_PluginBase):
         cols = {
             "cols": 12, "md": 12
         }
-        attrs = {"refresh": 600, "border": True}
-        month_num = 2 if self.is_mobile(kwargs.get('user_agent')) else 12
+        mobile = self.is_mobile(kwargs.get('user_agent'))
+        attrs = {"refresh": 600, "border": False}
         elements = [
             {
                 'component': 'VRow',
@@ -404,7 +404,7 @@ class DouBanWatching(_PluginBase):
                             'side': 'end',
                             'align': 'start'
                         },
-                        "content": self.get_line_item(month_num)
+                        "content": self.get_line_item(mobile=mobile)
                     }
                 ]
             }
@@ -412,7 +412,7 @@ class DouBanWatching(_PluginBase):
 
         return cols, attrs, elements
 
-    def get_line_item(self, month_num: int):
+    def get_line_item(self, mobile: bool = False):
         """
         processed_items[f"{title}"] = {
                         "subject_id": subject_id,
@@ -427,7 +427,7 @@ class DouBanWatching(_PluginBase):
         last_month = None
         current_month_item = None
         # 限制只显示两个月的
-        limit_month = month_num
+        limit_month = 2 if mobile else 12
         limit_month -= 1
 
         for key, val in list(data.items())[::-1]:
@@ -511,7 +511,7 @@ class DouBanWatching(_PluginBase):
                                 "component": "VImg",
                                 "props": {
                                     "src": poster_path.replace("/original/", "/w200/"),
-                                    "style": "width:44px; height: 66px;",
+                                    "style": "width:44px; height: 66px;" if mobile else "width:66px; height: 99px;",
                                     "aspect-ratio": "2/3"
                                 }
                             }
