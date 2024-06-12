@@ -23,7 +23,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.9.0"
+    plugin_version = "1.9.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -52,6 +52,11 @@ class DouBanWatching(_PluginBase):
         self._user = config.get("user", "")
         self._exclude = config.get("exclude", "")
         self._cookie = config.get("cookie", "")
+
+        if self.get_data("processed"):
+            from app.db.plugindata_oper import PluginDataOper
+            PluginDataOper.del_data("DouBanWatching")
+            logger.warn("检测到本插件旧版本数据，删除旧版本数据，避免报错...")
 
     @eventmanager.register(EventType.WebhookMessage)
     def sync_log(self, event: Event, played: bool = False):
