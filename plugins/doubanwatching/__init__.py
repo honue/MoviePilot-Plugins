@@ -23,7 +23,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.9.1"
+    plugin_version = "1.9.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -55,7 +55,7 @@ class DouBanWatching(_PluginBase):
 
         if self.get_data("processed"):
             from app.db.plugindata_oper import PluginDataOper
-            PluginDataOper.del_data("DouBanWatching")
+            PluginDataOper().del_data(plugin_id="DouBanWatching")
             logger.warn("检测到本插件旧版本数据，删除旧版本数据，避免报错...")
 
     @eventmanager.register(EventType.WebhookMessage)
@@ -524,10 +524,10 @@ class DouBanWatching(_PluginBase):
                     }
                 ]
             })
-
-        num_movies = len(current_month_item["content"][0]["content"][1]["content"])
-        current_month_item["content"][0]["content"][0]["text"] += f'看过{num_movies}部'
-        content.append(current_month_item)
+        if current_month_item:
+            num_movies = len(current_month_item["content"][0]["content"][1]["content"])
+            current_month_item["content"][0]["content"][0]["text"] += f'看过{num_movies}部'
+            content.append(current_month_item)
         return content
 
     @staticmethod
