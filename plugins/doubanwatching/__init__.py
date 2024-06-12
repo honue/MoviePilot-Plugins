@@ -459,7 +459,7 @@ class DouBanWatching(_PluginBase):
             if time_object.month != last_month or last_month is None:
                 if last_month:
                     num_movies = len(current_month_item["content"][0]["content"][1]["content"])
-                    current_month_item["content"][0]["content"][0]["text"] += f'看过{num_movies}部'
+                    current_month_item["content"][0]["content"][0]["html"] += f"<span class='text-sm font-normal'>看过{num_movies}部</span>"
                     content.append(current_month_item)
                     limit_month -= 1
                 # 初始化 current_month_item 模板
@@ -476,11 +476,12 @@ class DouBanWatching(_PluginBase):
                             },
                             'content': [
                                 {
-                                    'component': 'h5',
+                                    'component': 'h1',
                                     'props': {
-                                        'style': 'padding:0rem 0rem 1rem 0rem;font-weight: bold;'
+                                        'style': 'padding:0rem 0rem 1rem 0rem;font-weight: bold;',
+                                        'class': 'text-base'
                                     },
-                                    'text': f'{time_object.month}月 '
+                                    'html': f"{time_object.month}月 ",
                                 },
                                 {
                                     'component': 'VRow',
@@ -526,7 +527,7 @@ class DouBanWatching(_PluginBase):
             })
         if current_month_item:
             num_movies = len(current_month_item["content"][0]["content"][1]["content"])
-            current_month_item["content"][0]["content"][0]["text"] += f'看过{num_movies}部'
+            current_month_item["content"][0]["content"][0]["html"] += f"<span class='text-sm font-normal'>看过{num_movies}部</span>"
             content.append(current_month_item)
         return content
 
