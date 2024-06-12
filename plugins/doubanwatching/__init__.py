@@ -335,14 +335,6 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '因小组件(v1.8.7+) 所需数据变更，建议重置一下插件。'
-                                        }
-                                    },
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'info',
-                                            'variant': 'tonal',
                                             'text': 'v1.9.0 支持标记已观看同步，播放自动同步。'
                                         }
                                     }
