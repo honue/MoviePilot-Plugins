@@ -110,6 +110,9 @@ class DouBanWatching(_PluginBase):
             logger.warn(f'标题：{title}，tmdbid：{tmdb_id}，指定tmdbid未识别到媒体信息，尝试仅使用标题识别')
             meta.tmdbid = None
             mediainfo = self._recognize_media(meta, None)
+            if not mediainfo:
+                logger.error(f'仍然未识别到媒体信息，请检查TMDB网络连接...')
+                return
 
         episodes = mediainfo.seasons.get(season_id, [])
 
@@ -136,6 +139,9 @@ class DouBanWatching(_PluginBase):
             logger.warn(f'标题：{title}，tmdbid：{event_info.tmdb_id}，指定tmdbid未识别到媒体信息，尝试仅使用标题识别')
             meta.tmdbid = None
             mediainfo = self._recognize_media(meta, None)
+            if not mediainfo:
+                logger.error(f'仍然未识别到媒体信息，请检查TMDB网络连接...')
+                return
 
         if processed_items.get(title):
             logger.info(f"{title} 已同步到豆瓣在看，不处理")
@@ -459,7 +465,8 @@ class DouBanWatching(_PluginBase):
             if time_object.month != last_month or last_month is None:
                 if last_month:
                     num_movies = len(current_month_item["content"][0]["content"][1]["content"])
-                    current_month_item["content"][0]["content"][0]["html"] += f"<span class='text-sm font-normal'>看过{num_movies}部</span>"
+                    current_month_item["content"][0]["content"][0][
+                        "html"] += f"<span class='text-sm font-normal'>看过{num_movies}部</span>"
                     content.append(current_month_item)
                     limit_month -= 1
                 # 初始化 current_month_item 模板
@@ -527,7 +534,8 @@ class DouBanWatching(_PluginBase):
             })
         if current_month_item:
             num_movies = len(current_month_item["content"][0]["content"][1]["content"])
-            current_month_item["content"][0]["content"][0]["html"] += f"<span class='text-sm font-normal'>看过{num_movies}部</span>"
+            current_month_item["content"][0]["content"][0][
+                "html"] += f"<span class='text-sm font-normal'>看过{num_movies}部</span>"
             content.append(current_month_item)
         return content
 
