@@ -101,7 +101,7 @@ class AdaptiveIntroSkip(_PluginBase):
         current_video_item_id = get_current_video_item_id(item_id=event_info.item_id, season_id=event_info.season_id,
                                                           episode_id=event_info.episode_id)
         total_sec = get_total_time(current_video_item_id)
-        current_sec = current_percentage / 100 * total_sec
+        current_sec = int(current_percentage / 100 * total_sec)
 
         if self.trans_to_sec(begin_time) < current_sec < (total_sec - self.trans_to_sec(end_time)):
             logger.info(f"【不在时间段内】{event_info.item_name} {int(current_sec / 60)}分{int(current_sec % 60)}秒，不标记片头片尾")
