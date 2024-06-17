@@ -22,7 +22,7 @@ class AdaptiveIntroSkip(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png"
     # 插件版本
-    plugin_version = "1.7.3"
+    plugin_version = "1.7.4"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -146,32 +146,32 @@ class AdaptiveIntroSkip(_PluginBase):
         series_name = event.event_data.get("mediainfo").title
         if not series_name:
             return
+
+        logger.info(' ')
+        if event_info.total_episode > 5:
+            logger.info(f"【新集入库】本事件只处理追更订阅，跳过...")
+            return
+
         global handle_threading
         # 短时间大量入库
         with lock:
             # 已加入待处理线程
             if series_name in handle_threading:
-                logger.info(f'{series_name} 已在待处理队列中')
+                logger.info(f'【新集入库】{series_name} 已在待处理队列中')
                 return
             # 未加入待处理线程
             else:
                 handle_threading.append(series_name)
 
-        logger.info(' ')
+        logger.info(f'【新集入库】{series_name} 休眠15s，等待媒体入库...')
+        threading_event.wait(15)
+        with lock:
+            handle_threading.remove(series_name)
 
-        if event_info.total_episode > 5:
-            logger.info(f"本事件只处理追更订阅")
-            return
         chapter_info: dict = self.get_data(series_name)
         if not chapter_info:
             logger.info(f"【新集入库】{series_name} 没有设置过片头片尾信息，跳过")
             return
-
-        logger.info(f'【新集入库】{series_name} 休眠15s，等待媒体入库...')
-        threading_event.wait(15)
-
-        with lock:
-            handle_threading.remove(series_name)
 
         # 新入库剧集的item_id
         next_episode_ids = get_next_episode_ids(item_id=chapter_info.get("item_id"),
