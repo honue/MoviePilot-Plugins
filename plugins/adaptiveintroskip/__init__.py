@@ -104,7 +104,7 @@ class AdaptiveIntroSkip(_PluginBase):
         current_sec = current_percentage / 100 * total_sec
 
         if self.trans_to_sec(begin_time) < current_sec < (total_sec - self.trans_to_sec(end_time)):
-            logger.info(f"{event_info.item_name} 目前不在设置的时间段内，不标记片头片尾")
+            logger.info(f"【不在时间段内】{event_info.item_name} {int(current_sec / 60)}分{int(current_sec % 60)}秒，不标记片头片尾")
             return
 
         # 剧集在某集之后的所有剧集的item_id
