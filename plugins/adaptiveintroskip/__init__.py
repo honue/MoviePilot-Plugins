@@ -1,3 +1,4 @@
+import threading
 from typing import List, Tuple, Dict, Any
 
 from app.core.event import eventmanager, Event
@@ -8,6 +9,10 @@ from .skip_helper import *
 from app.log import logger
 from app.core.meta import MetaBase
 
+handle_threading = []
+lock = threading.Lock()
+threading_event = threading.Event()
+
 
 class AdaptiveIntroSkip(_PluginBase):
     # 插件名称
@@ -17,7 +22,7 @@ class AdaptiveIntroSkip(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png"
     # 插件版本
-    plugin_version = "1.7"
+    plugin_version = "1.7.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -122,7 +127,7 @@ class AdaptiveIntroSkip(_PluginBase):
                     update_intro(next_episode_id, intro_end)
                 chapter_info['intro_end'] = intro_end
                 logger.info(
-                    f"{event_info.item_name} 后续剧集片头设置在 {int(intro_end / 60)}分{int(intro_end % 60)}秒 结束")
+                    f"【恢复播放】{event_info.item_name} 后续剧集片头设置在 {int(intro_end / 60)}分{int(intro_end % 60)}秒 结束")
             # 当前播放时间（s）在[end_min,结束]之间，且是退出播放动作，标记片尾
             if (current_sec > (
                     total_sec - self.trans_to_sec(end_time)) and event_info.event == 'playback.stop') or manual:
@@ -131,7 +136,7 @@ class AdaptiveIntroSkip(_PluginBase):
                     update_credits(next_episode_id, credits_start)
                 chapter_info['credits_start'] = credits_start
                 logger.info(
-                    f"{event_info.item_name} 后续剧集片尾设置在 {int(credits_start / 60)}分{int(credits_start % 60)}秒 开始")
+                    f"【退出播放】{event_info.item_name} 后续剧集片尾设置在 {int(credits_start / 60)}分{int(credits_start % 60)}秒 开始")
 
             self.save_data(series_name, chapter_info)
 
@@ -141,20 +146,39 @@ class AdaptiveIntroSkip(_PluginBase):
         series_name = event.event_data.get("mediainfo").title
         if not series_name:
             return
+
+        # 短时间大量入库
+        with lock:
+            global handle_threading
+            # 已加入待处理线程
+            if series_name in handle_threading:
+                return
+            # 未加入待处理线程
+            else:
+                handle_threading.append(series_name)
+
         logger.info(' ')
+
         if event_info.total_episode > 5:
             logger.info(f"本事件只处理追更订阅")
             return
         chapter_info: dict = self.get_data(series_name)
         if not chapter_info:
-            logger.info(f"{series_name} 没有设置过片头片尾信息，跳过")
+            logger.info(f"【新集入库】{series_name} 没有设置过片头片尾信息，跳过")
             return
+
+        logger.info('【新集入库】休眠15s，等待媒体入库...')
+        threading_event.wait(15)
+
+        with lock:
+            global handle_threading
+            handle_threading.remove(series_name)
 
         # 新入库剧集的item_id
         next_episode_ids = get_next_episode_ids(item_id=chapter_info.get("item_id"),
                                                 season_id=event_info.begin_season,
                                                 episode_id=event_info.begin_episode)
-        logger.info(f'{series_name} 新入库剧集，item_id:{",".join(map(str, next_episode_ids))}')
+        logger.info(f'【新集入库】{series_name} 新入库剧集，item_id:{",".join(map(str, next_episode_ids))}')
 
         if next_episode_ids:
             # 批量标记新入库的剧集
@@ -162,13 +186,13 @@ class AdaptiveIntroSkip(_PluginBase):
             for next_episode_id in next_episode_ids:
                 update_intro(next_episode_id, intro_end)
             logger.info(
-                f"{series_name} {event_info.season_episode} 新入库剧集，片头设置在 {int(intro_end / 60)}分{int(intro_end % 60)}秒 结束")
+                f"【新集入库】{series_name} {event_info.season_episode} ，片头设置在 {int(intro_end / 60)}分{int(intro_end % 60)}秒 结束")
 
             credits_start = chapter_info.get("credits_start")
             for next_episode_id in next_episode_ids:
                 update_credits(next_episode_id, credits_start)
             logger.info(
-                f"{series_name} {event_info.season_episode} 新入库剧集，片尾设置在 {int(credits_start / 60)}分{int(intro_end % 60)}秒 开始")
+                f"【新集入库】{series_name} {event_info.season_episode} ，片尾设置在 {int(credits_start / 60)}分{int(intro_end % 60)}秒 开始")
 
     def trans_to_sec(self, time_str: str):
         if time_str.count(':'):
