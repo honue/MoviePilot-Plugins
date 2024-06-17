@@ -151,6 +151,7 @@ class AdaptiveIntroSkip(_PluginBase):
         with lock:
             # 已加入待处理线程
             if series_name in handle_threading:
+                logger.info(f'{series_name} 已在待处理队列中')
                 return
             # 未加入待处理线程
             else:
@@ -166,7 +167,7 @@ class AdaptiveIntroSkip(_PluginBase):
             logger.info(f"【新集入库】{series_name} 没有设置过片头片尾信息，跳过")
             return
 
-        logger.info('【新集入库】休眠15s，等待媒体入库...')
+        logger.info(f'【新集入库】{series_name} 休眠15s，等待媒体入库...')
         threading_event.wait(15)
 
         with lock:
