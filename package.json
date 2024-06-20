@@ -10,7 +10,7 @@
   "AdaptiveIntroSkip": {
     "name": "自适应IntroSkip",
     "description": "通过用户的暂停与播放动作，批量标记片头片尾",
-    "version": "1.7.4",
+    "version": "1.7.5",
     "history": {
       "v1.7": "fix: 新入库剧集标记片头的一些错误，如遇到问题请重置插件。",
       "v1.6": "(火柴总定制版)",

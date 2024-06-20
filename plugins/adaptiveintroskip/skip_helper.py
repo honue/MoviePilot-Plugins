@@ -27,10 +27,10 @@ def get_next_episode_ids(item_id, season_id, episode_id) -> list:
         response = requests.get(f'{base_url}Shows/{item_id}/Episodes', headers=headers)
         episodes_info = response.json()
         # 查找下一集的 ID
-        for episode in episodes_info['Items']:
+        for idx, episode in enumerate(episodes_info['Items']):
             if episode['IndexNumber'] >= episode_id and season_id == episode['ParentIndexNumber']:
                 next_episode_item_id = episode['Id']
-                logger.debug(f'第{episode_id + 1}集的 item_ID 为: {next_episode_item_id}')
+                logger.debug(f'第{episode_id + idx}集的 item_ID 为: {next_episode_item_id}')
                 ids.append(next_episode_item_id)
         return ids
     except Exception as e:
