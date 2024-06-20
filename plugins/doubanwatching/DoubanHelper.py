@@ -90,10 +90,10 @@ class DoubanHelper:
             item["title"] = item["title"].strip()
 
             # year 原名:피라미드 게임 / 朴昭妍 / 金知妍 / 2024
-            span_tag = div.find_all(class_="subject-cast")[0]
-            year: str = span_tag.string[-4:]
-            if year.isdigit():
-                item["year"] = year
+            # span_tag = div.find_all(class_="subject-cast")[0]
+            # year: str = span_tag.string[-4:]
+            # if year.isdigit():
+            #     item["year"] = year
 
             # subject_id
             link = unquote(a_tag["href"])
@@ -151,5 +151,5 @@ class DoubanHelper:
 
 if __name__ == "__main__":
     doubanHelper = DoubanHelper()
-    subject_title, subject_id = doubanHelper.get_subject_id("秘密森林2")
-    doubanHelper.set_watching_status(subject_id=subject_id, status="do", private=True)
+    subject_title, subject_id = doubanHelper.get_subject_id("太阳的后裔")
+    # doubanHelper.set_watching_status(subject_id=subject_id, status="do", private=True)
