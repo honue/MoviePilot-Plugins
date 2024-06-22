@@ -22,7 +22,7 @@ class AdaptiveIntroSkip(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png"
     # 插件版本
-    plugin_version = "1.7.5"
+    plugin_version = "1.7.6"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -172,8 +172,8 @@ class AdaptiveIntroSkip(_PluginBase):
         with lock:
             handle_threading.remove(series_name)
 
+        cnt = 1
         while True:
-            cnt = 1
             logger.info(f'【新集入库】{series_name} 休眠10s，等待媒体入库...')
             threading_event.wait(10)
             # 新入库剧集的item_id
