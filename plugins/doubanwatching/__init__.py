@@ -38,6 +38,7 @@ class DouBanWatching(_PluginBase):
     _enable = False
     _private = True
     _first = True
+    _on_played = False
 
     _user = ""
     _exclude = ""
@@ -191,7 +192,7 @@ class DouBanWatching(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -206,7 +207,7 @@ class DouBanWatching(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -221,7 +222,7 @@ class DouBanWatching(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -229,6 +230,21 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'model': 'first',
                                             'label': '不标记第一集',
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'on_played',
+                                            'label': '播放完成后同步',
                                         }
                                     }
                                 ]
@@ -354,6 +370,7 @@ class DouBanWatching(_PluginBase):
             "enable": False,
             "private": True,
             "first": True,
+            "on_played": False,
             "user": '',
             "exclude": '',
             "cookie": ""
