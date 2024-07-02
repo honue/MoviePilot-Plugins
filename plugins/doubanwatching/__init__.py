@@ -319,7 +319,7 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'model': 'pc_month',
                                             'label': '大屏幕显示月份数',
-                                            'placeholder': '3',
+                                            'placeholder': '默认3个月，最少两个月',
                                         }
                                     }
                                 ]
@@ -351,7 +351,7 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'model': 'mobile_month',
                                             'label': '小屏幕屏幕显示月份数',
-                                            'placeholder': '2',
+                                            'placeholder': '默认2个月，最少两个月',
                                         }
                                     }
                                 ]
