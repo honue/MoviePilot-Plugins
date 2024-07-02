@@ -56,10 +56,10 @@ class DouBanWatching(_PluginBase):
         self._exclude = config.get("exclude", "")
         self._cookie = config.get("cookie", "")
 
-        self._pc_month = int(config.get("pc_month", 3))
-        self._pc_num = int(config.get("pc_num", 50))
-        self._mobile_month = int(config.get("mobile_month", 2))
-        self._mobile_num = int(config.get("mobile_num", 15))
+        self._pc_month = int(config.get("pc_month")) if config.get("pc_month", None) else 3
+        self._pc_num = int(config.get("pc_num", 50)) if config.get("pc_num", None) else 50
+        self._mobile_month = int(config.get("mobile_month")) if config.get("mobile_month", None) else 2
+        self._mobile_num = int(config.get("mobile_num")) if config.get("mobile_num", None) else 15
 
         if self.get_data("processed"):
             from app.db.plugindata_oper import PluginDataOper
