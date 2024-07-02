@@ -23,7 +23,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.9.2"
+    plugin_version = "1.9.3"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -38,11 +38,14 @@ class DouBanWatching(_PluginBase):
     _enable = False
     _private = True
     _first = True
-
     _user = ""
     _exclude = ""
-
     _cookie = ""
+
+    _pc_month = None
+    _pc_num = None
+    _mobile_month = None
+    _mobile_num = None
 
     def init_plugin(self, config: dict = None):
         config = config or {}
@@ -52,6 +55,11 @@ class DouBanWatching(_PluginBase):
         self._user = config.get("user", "")
         self._exclude = config.get("exclude", "")
         self._cookie = config.get("cookie", "")
+
+        self._pc_month = int(config.get("pc_month", 3))
+        self._pc_num = int(config.get("pc_num", 50))
+        self._mobile_month = int(config.get("mobile_month", 2))
+        self._mobile_num = int(config.get("mobile_num", 15))
 
         if self.get_data("processed"):
             from app.db.plugindata_oper import PluginDataOper
@@ -303,6 +311,76 @@ class DouBanWatching(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'pc_month',
+                                            'label': '大屏幕显示月份数',
+                                            'placeholder': '3',
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'pc_num',
+                                            'label': '大屏幕每月最多显示数',
+                                            'placeholder': '50',
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'mobile_month',
+                                            'label': '小屏幕屏幕显示月份数',
+                                            'placeholder': '2',
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'mobile_num',
+                                            'label': '小屏幕每月最多显示数',
+                                            'placeholder': '15',
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
                                 },
                                 'content': [
                                     {
@@ -356,42 +434,12 @@ class DouBanWatching(_PluginBase):
             "first": True,
             "user": '',
             "exclude": '',
-            "cookie": ""
+            "cookie": "",
+            "pc_month": 3,
+            "pc_num": 50,
+            "mobile_month": 2,
+            "mobile_num": 15,
         }
-
-    @staticmethod
-    def exclude_keyword(path: str, keywords: str) -> Dict[str, Any]:
-        if not keywords:
-            return {"ret": True, "message": "空关键词"}
-
-        keywords_list = re.split(r'[，,]', keywords)
-        if any(k in path for k in keywords_list):
-            return {"ret": False, "message": f"路径 {path} 包含 {keywords}"}
-
-        return {"ret": True, "message": f"路径 {path} 不包含任何关键词 {keywords}"}
-
-    @staticmethod
-    def format_title(title: str, season_id: int) -> str:
-        if season_id > 1:
-            return f"{title} 第{season_id}季"
-        else:
-            return title
-
-    def get_page(self) -> List[dict]:
-        pass
-
-    def get_state(self) -> bool:
-        return self._enable
-
-    def stop_service(self):
-        pass
-
-    @staticmethod
-    def get_command() -> List[Dict[str, Any]]:
-        pass
-
-    def get_api(self) -> List[Dict[str, Any]]:
-        pass
 
     def get_dashboard(self, **kwargs) -> Optional[Tuple[Dict[str, Any], Dict[str, Any], List[dict]]]:
         cols = {
@@ -437,11 +485,17 @@ class DouBanWatching(_PluginBase):
         # 按月分组
         last_month = None
         current_month_item = None
-        # 限制只显示两个月的
-        limit_month = 2 if mobile else 12
+        # 限制显示月数
+        limit_month = self._mobile_month if mobile else self._pc_month
         limit_month -= 1
+        # 限制每月最多显示数
+        limit_num = self._mobile_num if mobile else self._pc_num
 
-        for key, val in list(data.items())[::-1]:
+        # 将字典按照 timestamp 排序
+        sorted_data = sorted(data.items(),
+                             key=lambda item: datetime.strptime(item[1]['timestamp'], "%Y-%m-%d %H:%M:%S"))
+
+        for key, val in sorted_data[::-1]:
             if not isinstance(val, dict):
                 continue
             if not val.get('poster_path', ''):
@@ -459,16 +513,20 @@ class DouBanWatching(_PluginBase):
 
             time_object = datetime.strptime(val.get('timestamp'), "%Y-%m-%d %H:%M:%S")
 
-            if limit_month < 1:
-                break
-
             if time_object.month != last_month or last_month is None:
+                if limit_month < 1:
+                    break
                 if last_month:
                     num_movies = len(current_month_item["content"][0]["content"][1]["content"])
                     current_month_item["content"][0]["content"][0][
                         "html"] += f"<span class='text-sm font-normal'>看过{num_movies}部</span>"
+                    # 截取limit_num
+                    current_month_item["content"][0]["content"][1]["content"] = \
+                        current_month_item["content"][0]["content"][1]["content"][:limit_num]
                     content.append(current_month_item)
                     limit_month -= 1
+
+                # 新的一月
                 # 初始化 current_month_item 模板
                 current_month_item = {
                     "component": "VTimelineItem",
@@ -532,10 +590,13 @@ class DouBanWatching(_PluginBase):
                     }
                 ]
             })
+
         if current_month_item:
             num_movies = len(current_month_item["content"][0]["content"][1]["content"])
             current_month_item["content"][0]["content"][0][
                 "html"] += f"<span class='text-sm font-normal'>看过{num_movies}部</span>"
+            current_month_item["content"][0]["content"][1]["content"] = \
+                current_month_item["content"][0]["content"][1]["content"][:limit_num]
             content.append(current_month_item)
         return content
 
@@ -548,3 +609,37 @@ class DouBanWatching(_PluginBase):
             if re.search(keyword, user_agent, re.IGNORECASE):
                 return True
         return False
+
+    def get_page(self) -> List[dict]:
+        pass
+
+    def get_state(self) -> bool:
+        return self._enable
+
+    def stop_service(self):
+        pass
+
+    @staticmethod
+    def get_command() -> List[Dict[str, Any]]:
+        pass
+
+    def get_api(self) -> List[Dict[str, Any]]:
+        pass
+
+    @staticmethod
+    def exclude_keyword(path: str, keywords: str) -> Dict[str, Any]:
+        if not keywords:
+            return {"ret": True, "message": "空关键词"}
+
+        keywords_list = re.split(r'[，,]', keywords)
+        if any(k in path for k in keywords_list):
+            return {"ret": False, "message": f"路径 {path} 包含 {keywords}"}
+
+        return {"ret": True, "message": f"路径 {path} 不包含任何关键词 {keywords}"}
+
+    @staticmethod
+    def format_title(title: str, season_id: int) -> str:
+        if season_id > 1:
+            return f"{title} 第{season_id}季"
+        else:
+            return title
