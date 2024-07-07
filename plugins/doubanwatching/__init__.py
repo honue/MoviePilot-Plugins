@@ -23,7 +23,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.9.3"
+    plugin_version = "1.9.4"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -560,7 +560,8 @@ class DouBanWatching(_PluginBase):
                     ]
                 }
                 last_month = time_object.month
-
+            if not poster_path or (poster_path.count('original') < 1):
+                continue
             current_month_item["content"][0]["content"][1]["content"].append({
                 "component": "a",
                 'props': {
