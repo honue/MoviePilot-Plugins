@@ -632,6 +632,10 @@ class DouBanWatching(_PluginBase):
         if not keywords:
             return {"ret": True, "message": "空关键词"}
 
+        if not path:
+            logger.warn('媒体路径为空,不执行过滤操作')
+            return {"ret": True, "message": "媒体路径为空,不执行过滤操作"}
+
         keywords_list = re.split(r'[，,]', keywords)
         if any(k in path for k in keywords_list):
             return {"ret": False, "message": f"路径 {path} 包含 {keywords}"}
