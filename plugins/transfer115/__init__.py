@@ -1,4 +1,5 @@
 import os
+import subprocess
 import threading
 from datetime import datetime, timedelta
 
@@ -28,7 +29,7 @@ class Transfer115(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.9"
+    plugin_version = "0.0.10"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -47,6 +48,8 @@ class Transfer115(_PluginBase):
     _p115_media_prefix_path = '/emby/'
     # 本地媒体库路径前缀
     _local_media_prefix_path = '/downloads/link/'
+    # 软链接前缀
+    _softlink_prefix_path = '/softlink/'
 
     _server = ''
     _username = ''
@@ -113,6 +116,13 @@ class Transfer115(_PluginBase):
             waiting_process_list = self.get_data('waiting_process_list') or []
             waiting_process_list = waiting_process_list + transfer_info.file_list_new
             self.save_data('waiting_process_list', waiting_process_list)
+
+        # 上传前先创建 链接本地媒体文件的软链接 以便扫库 保障可观看
+        for local_file in transfer_info.file_list_new:
+            softlink_file = local_file.replace(self._local_media_prefix_path, self._softlink_prefix_path)
+            subprocess.run(['ln', '-sf', local_file, softlink_file])
+            logger.info(f'创建软链接{softlink_file} -> 本地文件{local_file}')
+
         logger.info(f'新入库，加入待转移列表 {transfer_info.file_list_new}')
 
         media_info: MediaInfo = event.event_data.get('mediainfo', {})
@@ -124,7 +134,8 @@ class Transfer115(_PluginBase):
                 try:
                     self._scheduler.remove_all_jobs()
                     self._scheduler.add_job(func=self.task, trigger='date',
-                                            run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(minutes=self._cron),
+                                            run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(
+                                                minutes=self._cron),
                                             name="转移115")
                 except Exception as err:
                     logger.error(f"定时任务配置错误：{str(err)}")
@@ -146,12 +157,16 @@ class Transfer115(_PluginBase):
             process_list = waiting_process_list.copy()
             total_num = len(waiting_process_list)
             for file in waiting_process_list:
-                dest_path = file.replace(self._local_media_prefix_path, self._p115_media_prefix_path)
+                dest_file = file.replace(self._local_media_prefix_path, self._p115_media_prefix_path)
                 if self._upload_file(file):
                     process_list.remove(file)
-                    logger.info(f'上传成功 {total_num-len(process_list)}/{total_num} {dest_path}')
+                    logger.info(f'上传成功 {total_num - len(process_list)}/{total_num} {dest_file}')
+                    # 上传成功 创建软链接 指向路径 前缀无所谓 可以通过emby2alist 替换
+                    softlink_file = dest_file.replace(self._p115_media_prefix_path, self._softlink_prefix_path)
+                    subprocess.run(['ln', '-sf', '/CloudNAS/CloudDrive/115' + dest_file, softlink_file])
+                    logger.info(f'创建软链接{softlink_file} -> 云盘文件{dest_file}')
                 else:
-                    logger.error(f'上传失败 {dest_path}')
+                    logger.error(f'上传失败 {dest_file}')
                 self.save_data('waiting_process_list', process_list)
 
     def _upload_file(self, file_path: str = None):
