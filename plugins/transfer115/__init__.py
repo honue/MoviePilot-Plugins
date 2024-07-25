@@ -14,7 +14,7 @@ from app.db.subscribe_oper import SubscribeOper
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas import TransferInfo, MediaInfo
-from app.schemas.types import EventType
+from app.schemas.types import EventType, SystemConfigKey
 
 lock = threading.Lock()
 
@@ -159,7 +159,7 @@ class Transfer115(_PluginBase):
                 p115_dest = softlink_source.replace(self._softlink_prefix_path, self._p115_media_prefix_path)
                 if self._upload_file(softlink_source=softlink_source, p115_dest=p115_dest):
                     process_list.remove(softlink_source)
-                    logger.info(f'{total_num - len(process_list)}/{total_num} 上传成功 {softlink_source} {p115_dest}')
+                    logger.info(f'【{total_num - len(process_list)}/{total_num}】 上传成功 {softlink_source} {p115_dest}')
                     # 上传成功 软链接 更改为 clouddrive2 挂载的路径
                     cd2_dest = p115_dest.replace(self._p115_media_prefix_path, self._cd_mount_prefix_path)
                     softlink_dir = os.path.dirname(softlink_source)
@@ -173,6 +173,7 @@ class Transfer115(_PluginBase):
                 self.save_data('waiting_process_list', process_list)
 
     def _upload_file(self, softlink_source: str = None, p115_dest: str = None) -> bool:
+        logger.info('')
         try:
             p115_dest_folder, p115_dest_file_name = os.path.split(p115_dest)
 
@@ -184,7 +185,7 @@ class Transfer115(_PluginBase):
             # 获取软链接的真实文件路径 用于上传
             real_source = os.readlink(softlink_source)
             real_source_folder, real_source_file_name = os.path.split(real_source)
-
+            logger.info(f'源文件路径 {real_source}')
             if not self._fs.exists(p115_dest):
                 # 将文件上传到当前文件夹
                 self._fs.chdir(p115_dest_folder)
@@ -295,7 +296,7 @@ class Transfer115(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
+                                    'md': 4
                                 },
                                 'content': [
                                     {
@@ -312,7 +313,7 @@ class Transfer115(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
+                                    'md': 4
                                 },
                                 'content': [
                                     {
@@ -328,7 +329,7 @@ class Transfer115(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
+                                    'md': 4
                                 },
                                 'content': [
                                     {
@@ -371,6 +372,7 @@ class Transfer115(_PluginBase):
             logger.error(f"plugin_key错误：{plugin_key}")
             return f"plugin_key错误：{plugin_key}"
         else:
+            # 更新插件 cookie
             self._cookie = cookie
             self.update_config({
                 'enable': self._enable,
@@ -381,6 +383,16 @@ class Transfer115(_PluginBase):
                 'softlink_prefix_path': self._softlink_prefix_path,
                 'cd_mount_prefix_path': self._cd_mount_prefix_path
             })
+
+            # 更新mp 115 cookie
+            parts = cookie.split(';')
+            cookie_data = {}
+            for part in parts:
+                if '=' in part:
+                    key, value = part.split('=', 1)
+                    cookie_data[key] = value
+            self.systemconfig.set(SystemConfigKey.User115Params, cookie_data)
+
             return "更新115cookie成功"
 
     def get_page(self) -> List[dict]:
