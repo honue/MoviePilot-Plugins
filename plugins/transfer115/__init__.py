@@ -2,12 +2,10 @@ import os
 import subprocess
 import threading
 from datetime import datetime, timedelta
-
 from typing import List, Tuple, Dict, Any
 
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 from p115 import P115Client, P115FileSystem
 
 from app.core.config import settings
@@ -29,7 +27,7 @@ class Transfer115(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.11"
+    plugin_version = "0.1.0"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -44,12 +42,12 @@ class Transfer115(_PluginBase):
     _enable = True
     _cron = '20'
     _onlyonce = False
-    # 115网盘媒体库路径前缀
-    _p115_media_prefix_path = '/emby/'
-    # 本地媒体库路径前缀
-    _local_media_prefix_path = '/downloads/link/'
     # 软链接前缀
     _softlink_prefix_path = '/softlink/'
+    # 115网盘媒体库路径前缀
+    _p115_media_prefix_path = '/emby/'
+    # cd2挂载本地媒体库前缀
+    _cd_mount_prefix_path = '/CloudNAS/CloudDrive/115/emby/'
 
     _server = ''
     _username = ''
@@ -69,8 +67,9 @@ class Transfer115(_PluginBase):
             self._cron: int = int(config.get('cron', '20'))
             self._onlyonce = config.get('onlyonce', False)
             self._cookie = config.get('cookie', '')
+            self._softlink_prefix_path = config.get('softlink_prefix_path', '/downloads/link/')
             self._p115_media_prefix_path = config.get('p115_media_prefix_path', '/emby/')
-            self._local_media_prefix_path = config.get('local_media_prefix_path', '/downloads/link/')
+            self._cd_mount_prefix_path = config.get('cd_mount_prefix_path', '/CloudNAS/CloudDrive/115/emby/')
 
         self.stop_service()
 
@@ -99,7 +98,8 @@ class Transfer115(_PluginBase):
                 'onlyonce': False,
                 'cookie': self._cookie,
                 'p115_media_prefix_path': self._p115_media_prefix_path,
-                'local_media_prefix_path': self._local_media_prefix_path
+                'softlink_prefix_path': self._softlink_prefix_path,
+                'cd_mount_prefix_path': self._cd_mount_prefix_path
             })
 
         if self._scheduler.get_jobs():
@@ -113,28 +113,21 @@ class Transfer115(_PluginBase):
         if not transfer_info.file_list_new:
             return
         with lock:
+            # 等待转移的文件的软链接的完整路径
             waiting_process_list = self.get_data('waiting_process_list') or []
             waiting_process_list = waiting_process_list + transfer_info.file_list_new
             self.save_data('waiting_process_list', waiting_process_list)
 
-        # 上传前先创建 链接本地媒体文件的软链接 以便扫库 保障可观看
-        for local_file in transfer_info.file_list_new:
-            softlink_file = local_file.replace(self._local_media_prefix_path, self._softlink_prefix_path)
-            softlink_dir = os.path.dirname(softlink_file)
-            if not os.path.exists(softlink_dir):
-                logger.info(f'软链接文件夹不存在 创建文件夹 {softlink_dir}')
-                os.makedirs(softlink_dir)
-            subprocess.run(['ln', '-sf', local_file, softlink_file])
-            logger.info(f'创建软链接: {softlink_file} -> 本地文件: {local_file}')
-
         logger.info(f'新入库，加入待转移列表 {transfer_info.file_list_new}')
 
+        # 判断段转移任务开始时间 新剧晚点上传 老剧立马上传
         media_info: MediaInfo = event.event_data.get('mediainfo', {})
         if media_info:
             is_exist = self._subscribe_oper.exists(tmdbid=media_info.tmdb_id, doubanid=media_info.douban_id,
                                                    season=media_info.season)
             if is_exist:
-                logger.info(f'追更剧集,{self._cron}分钟后再上传...')
+                if not self._scheduler.get_jobs():
+                    logger.info(f'追更剧集,{self._cron}分钟后开始执行任务...')
                 try:
                     self._scheduler.remove_all_jobs()
                     self._scheduler.add_job(func=self.task, trigger='date',
@@ -144,7 +137,8 @@ class Transfer115(_PluginBase):
                 except Exception as err:
                     logger.error(f"定时任务配置错误：{str(err)}")
             else:
-                logger.info(f'已完结剧集,立即上传...')
+                if not self._scheduler.get_jobs():
+                    logger.info(f'已完结剧集,立即执行上传任务...')
                 self._scheduler.remove_all_jobs()
                 self._scheduler.add_job(func=self.task, trigger='date',
                                         run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=5),
@@ -160,39 +154,45 @@ class Transfer115(_PluginBase):
             logger.info(f'开始执行上传任务 {waiting_process_list}')
             process_list = waiting_process_list.copy()
             total_num = len(waiting_process_list)
-            for file in waiting_process_list:
-                dest_file = file.replace(self._local_media_prefix_path, self._p115_media_prefix_path)
-                if self._upload_file(file):
-                    process_list.remove(file)
-                    logger.info(f'上传成功 {total_num - len(process_list)}/{total_num} {dest_file}')
-                    # 上传成功 创建软链接 指向路径 前缀无所谓 可以通过emby2alist 替换
-                    softlink_file = dest_file.replace(self._p115_media_prefix_path, self._softlink_prefix_path)
-                    softlink_dir = os.path.dirname(softlink_file)
+            for softlink_source in waiting_process_list:
+                # 软链接目录前缀 替换为 115网盘 目录前缀  这个文件的115保存路径
+                p115_dest = softlink_source.replace(self._softlink_prefix_path, self._p115_media_prefix_path)
+                if self._upload_file(softlink_source=softlink_source, p115_dest=p115_dest):
+                    process_list.remove(softlink_source)
+                    logger.info(f'{total_num - len(process_list)}/{total_num} 上传成功 {softlink_source} {p115_dest}')
+                    # 上传成功 软链接 更改为 clouddrive2 挂载的路径
+                    cd2_dest = p115_dest.replace(self._p115_media_prefix_path, self._cd_mount_prefix_path)
+                    softlink_dir = os.path.dirname(softlink_source)
                     if not os.path.exists(softlink_dir):
                         logger.info(f'软链接文件夹不存在 创建文件夹 {softlink_dir}')
                         os.makedirs(softlink_dir)
-                    subprocess.run(['ln', '-sf', '/CloudNAS/CloudDrive/115' + dest_file, softlink_file])
-                    logger.info(f'创建软链接: {softlink_file} -> 云盘文件: /CloudNAS/CloudDrive/115{dest_file}')
+                    subprocess.run(['ln', '-sf', cd2_dest, softlink_source])
+                    logger.info(f'更新软链接: {softlink_source} -> 云盘文件: {cd2_dest}')
                 else:
-                    logger.error(f'上传失败 {dest_file}')
+                    logger.error(f'上传失败 {softlink_source} {p115_dest}')
                 self.save_data('waiting_process_list', process_list)
 
-    def _upload_file(self, file_path: str = None):
+    def _upload_file(self, softlink_source: str = None, p115_dest: str = None) -> bool:
         try:
-            # /downloads/link/series/日韩剧/财阀X刑警 (2024)/Season 1/财阀X刑警 - S01E12 - 第 12 集.mkv
-            # /emby/series/日韩剧/财阀X刑警 (2024)/Season 1/财阀X刑警 - S01E12 - 第 12 集.mkv
-            dest_path = file_path.replace(self._local_media_prefix_path, self._p115_media_prefix_path)
-            # folder /emby/series/日韩剧/财阀X刑警 (2024)/Season 1  file_name 财阀X刑警 - S01E12 - 第 12 集.mkv
-            folder, file_name = os.path.split(dest_path)
-            if not self._fs.exists(folder):
-                self._fs.makedirs(folder)
-                logger.info(f'创建文件夹 {folder}')
-            self._fs.chdir(folder)
+            p115_dest_folder, p115_dest_file_name = os.path.split(p115_dest)
+
+            if not self._fs.exists(p115_dest_folder):
+                self._fs.makedirs(p115_dest_folder)
+                logger.info(f'创建文件夹 {p115_dest_folder}')
+
             # 将本地媒体库文件上传
-            if not self._fs.exists(dest_path):
-                self._fs.upload(file_path)
+            # 获取软链接的真实文件路径 用于上传
+            real_source = os.readlink(softlink_source)
+            real_source_folder, real_source_file_name = os.path.split(real_source)
+
+            if not self._fs.exists(p115_dest):
+                # 将文件上传到当前文件夹
+                self._fs.chdir(p115_dest_folder)
+                self._fs.upload(real_source)
+                # 将种子名重命名为媒体名
+                self._fs.rename(p115_dest_folder + '/' + real_source_file_name, p115_dest)
             else:
-                logger.info(f'{file_name} 已存在')
+                logger.info(f'{p115_dest_file_name} 已存在')
             return True
         except Exception as e:
             logger.error(e)
@@ -301,9 +301,9 @@ class Transfer115(_PluginBase):
                                     {
                                         'component': 'VTextField',
                                         'props': {
-                                            'model': 'local_media_prefix_path',
-                                            'label': '本地媒体库路径前缀',
-                                            'placeholder': '/downloads/link/'
+                                            'model': 'softlink_prefix_path',
+                                            'label': '本地软链接媒体库路径前缀',
+                                            'placeholder': '/softlink/'
                                         }
                                     }
                                 ]
@@ -324,6 +324,22 @@ class Transfer115(_PluginBase):
                                         }
                                     }
                                 ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 6
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'cd_mount_prefix_path',
+                                            'label': 'cd2挂载媒体库路径前缀',
+                                            'placeholder': '/CloudNAS/CloudDrive/115/emby/'
+                                        }
+                                    }
+                                ]
                             }
                         ]
                     }
@@ -335,7 +351,8 @@ class Transfer115(_PluginBase):
             'onlyonce': self._onlyonce,
             'cookie': self._cookie,
             'p115_media_prefix_path': self._p115_media_prefix_path,
-            'local_media_prefix_path': self._local_media_prefix_path
+            'softlink_prefix_path': self._softlink_prefix_path,
+            'cd_mount_prefix_path': self._cd_mount_prefix_path
         }
 
     def get_api(self) -> List[Dict[str, Any]]:
@@ -361,7 +378,8 @@ class Transfer115(_PluginBase):
                 'onlyonce': False,
                 'cookie': self._cookie,
                 'p115_media_prefix_path': self._p115_media_prefix_path,
-                'local_media_prefix_path': self._local_media_prefix_path
+                'softlink_prefix_path': self._softlink_prefix_path,
+                'cd_mount_prefix_path': self._cd_mount_prefix_path
             })
             return "更新115cookie成功"
 
