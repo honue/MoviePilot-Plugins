@@ -29,7 +29,7 @@ class Transfer115(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.10"
+    plugin_version = "0.0.11"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -120,8 +120,12 @@ class Transfer115(_PluginBase):
         # 上传前先创建 链接本地媒体文件的软链接 以便扫库 保障可观看
         for local_file in transfer_info.file_list_new:
             softlink_file = local_file.replace(self._local_media_prefix_path, self._softlink_prefix_path)
+            softlink_dir = os.path.dirname(softlink_file)
+            if not os.path.exists(softlink_dir):
+                logger.info(f'软链接文件夹不存在 创建文件夹 {softlink_dir}')
+                os.makedirs(softlink_dir)
             subprocess.run(['ln', '-sf', local_file, softlink_file])
-            logger.info(f'创建软链接{softlink_file} -> 本地文件{local_file}')
+            logger.info(f'创建软链接: {softlink_file} -> 本地文件: {local_file}')
 
         logger.info(f'新入库，加入待转移列表 {transfer_info.file_list_new}')
 
@@ -163,8 +167,12 @@ class Transfer115(_PluginBase):
                     logger.info(f'上传成功 {total_num - len(process_list)}/{total_num} {dest_file}')
                     # 上传成功 创建软链接 指向路径 前缀无所谓 可以通过emby2alist 替换
                     softlink_file = dest_file.replace(self._p115_media_prefix_path, self._softlink_prefix_path)
+                    softlink_dir = os.path.dirname(softlink_file)
+                    if not os.path.exists(softlink_dir):
+                        logger.info(f'软链接文件夹不存在 创建文件夹 {softlink_dir}')
+                        os.makedirs(softlink_dir)
                     subprocess.run(['ln', '-sf', '/CloudNAS/CloudDrive/115' + dest_file, softlink_file])
-                    logger.info(f'创建软链接{softlink_file} -> 云盘文件{dest_file}')
+                    logger.info(f'创建软链接: {softlink_file} -> 云盘文件: /CloudNAS/CloudDrive/115{dest_file}')
                 else:
                     logger.error(f'上传失败 {dest_file}')
                 self.save_data('waiting_process_list', process_list)
