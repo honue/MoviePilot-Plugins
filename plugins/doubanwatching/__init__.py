@@ -2,7 +2,10 @@ import threading
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, List
 
+import requests
+
 from app.chain.media import MediaChain
+from app.core.config import settings
 from app.core.event import eventmanager, Event
 from app.core.metainfo import MetaInfo
 from app.plugins import _PluginBase
@@ -36,6 +39,7 @@ class DouBanWatching(_PluginBase):
     auth_level = 1
 
     _enable = False
+    _sync_history_once = False
     _private = True
     _first = True
     _user = ""
@@ -46,6 +50,8 @@ class DouBanWatching(_PluginBase):
     _pc_num = None
     _mobile_month = None
     _mobile_num = None
+    _media_types = []
+    _emby_library_ids = []
 
     def init_plugin(self, config: dict = None):
         config = config or {}
@@ -60,11 +66,41 @@ class DouBanWatching(_PluginBase):
         self._pc_num = int(config.get("pc_num", 50)) if config.get("pc_num", None) else 50
         self._mobile_month = int(config.get("mobile_month")) if config.get("mobile_month", None) else 2
         self._mobile_num = int(config.get("mobile_num")) if config.get("mobile_num", None) else 15
+        self._media_types = config.get("media_types", [])
+        self._emby_library_ids = config.get("emby_library_ids", [])
+        self._sync_history_once = config.get("sync_history_once") or False
 
         if self.get_data("processed"):
             from app.db.plugindata_oper import PluginDataOper
             PluginDataOper().del_data(plugin_id="DouBanWatching")
             logger.warn("检测到本插件旧版本数据，删除旧版本数据，避免报错...")
+
+        if self._sync_history_once:
+            logger.info(f"根据条件同步所有历史记录到豆瓣，立即运行一次")
+            # todo
+            self.sync_emby_to_douban()
+
+            self._sync_history_once = False
+        self.__update_config()
+
+
+    def __update_config(self):
+        self.update_config({
+            "enable": self._enable,
+            "private": self._private,
+            "first": self._first,
+            "user": self._user,
+            "exclude": self._exclude,
+            "cookie": self._cookie,
+            "pc_month": self._pc_month,
+            "pc_num": self._pc_num,
+            "mobile_month": self._mobile_month,
+            "mobile_num": self._mobile_num,
+            "media_types": self._media_types,
+            "emby_library_ids": self._emby_library_ids,
+            "sync_history_once": self._sync_history_once,
+        })
+
 
     @eventmanager.register(EventType.WebhookMessage)
     def sync_log(self, event: Event, played: bool = False):
@@ -82,9 +118,9 @@ class DouBanWatching(_PluginBase):
                 logger.info(self.exclude_keyword(path=path, keywords=self._exclude).get("message", ""))
                 return
 
-            if event_info.item_type == "TV":
+            if event_info.item_type == "TV" and "Series" in self._media_types:
                 self._process_tv_show(event_info, processed_items, played=played)
-            else:
+            elif "Movie" in self._media_types:
                 self._process_movie(event_info, processed_items, played=played)
 
     @eventmanager.register(EventType.WebhookMessage)
@@ -210,7 +246,29 @@ class DouBanWatching(_PluginBase):
                                         }
                                     }
                                 ]
-                            }, {
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 4
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'sync_history_once',
+                                            'label': '同步所有已观看记录(运行一次)',
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
@@ -298,6 +356,52 @@ class DouBanWatching(_PluginBase):
                                             'model': 'cookie',
                                             'label': '豆瓣cookie',
                                             'placeholder': '留空则每次从cookiecloud获取',
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 6
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSelect',
+                                        'props': {
+                                            'model': 'emby_library_ids',
+                                            'label': '选择需要同步的Emby库',
+                                            'items': self.get_emby_library_items(),
+                                            'multiple': True,  # 允许多选
+                                            'clearable': True
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 6
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSelect',
+                                        'props': {
+                                            'model': 'media_types',
+                                            'label': '选择需要同步的类型',
+                                            'items': [
+                                                {'title': '电影', 'value': 'Movie'},
+                                                {'title': '电视剧', 'value': 'Series'}
+                                            ],
+                                            'multiple': True,  # 允许多选
+                                            'clearable': True
                                         }
                                     }
                                 ]
@@ -430,6 +534,7 @@ class DouBanWatching(_PluginBase):
             }
         ], {
             "enable": False,
+            "sync_history_once": False,
             "private": True,
             "first": True,
             "user": '',
@@ -439,7 +544,200 @@ class DouBanWatching(_PluginBase):
             "pc_num": 50,
             "mobile_month": 2,
             "mobile_num": 15,
+            "emby_library_ids": [],  # 默认是空的
+            "media_types": []  # 默认是空的
         }
+
+    def get_emby_user_id(self, username: str) -> Optional[str]:
+        """
+        根据用户名获取 Emby 用户 ID
+        """
+        base_url = getattr(settings, 'EMBY_HOST', None)
+        api_key = getattr(settings, 'EMBY_API_KEY', None)
+
+        # 检查 base_url 和 api_key 是否存在
+        if not base_url or not api_key:
+            logger.warning("Emby的 base_url 或 api_key 为空，无法获取用户信息。")
+            return None
+
+        url = f"{base_url}/emby/Users"
+
+        try:
+            response = requests.get(url, headers={"X-Emby-Token": api_key})
+
+            if response.status_code != 200:
+                logger.error(f"获取Emby用户信息失败，状态码: {response.status_code}")
+                return None
+
+            users = response.json()
+            for user in users:
+                if user.get('Name') == username:
+                    return user.get('Id')
+
+            logger.warning(f"未找到用户名为 {username} 的Emby用户。")
+            return None
+
+        except requests.RequestException as e:
+            logger.error(f"请求Emby用户信息时发生错误: {e}")
+            return None
+
+    def get_emby_library_items(self) -> List[dict]:
+        """
+        获取Emby中的所有库信息，返回库ID和名称。
+        兼容各种空值情况，包括空的base_url、api_key或_user。
+        """
+        base_url = getattr(settings, 'EMBY_HOST', None)
+        api_key = getattr(settings, 'EMBY_API_KEY', None)
+        user_id = self._user
+        # 如果 base_url, api_key 或 user_id 为空，直接返回空列表
+        if not base_url or not api_key or not user_id:
+            logger.warning("Emby的 base_url、api_key 或 user_id 为空，无法获取库信息。")
+            return []
+
+        emby_user_id = self.get_emby_user_id(user_id)
+        if emby_user_id is None:
+            logger.warning("未找到用户")
+            return []
+        logger.warning(emby_user_id)
+        url = f"{base_url}/emby/Users/{emby_user_id}/Views"
+        logger.warning(url)
+
+        try:
+            response = requests.get(url, headers={"X-Emby-Token": api_key})
+            # 检查请求是否成功
+            if response.status_code != 200:
+                logger.error(f"获取Emby库信息失败，状态码: {response.status_code}")
+                return []
+
+            # 解析响应数据
+            libraries = response.json().get('Items', [])
+
+            if not libraries:
+                logger.warning("Emby库信息为空或未找到任何库。")
+                return []
+
+            # 返回库的名称和ID
+            return [{"title": library.get('Name', 'Unknown'), "value": library.get('Id')} for library in libraries if
+                    library.get('Id')]
+
+        except requests.RequestException as e:
+            logger.error(f"请求Emby库信息时发生错误: {e}")
+            return []
+
+    def get_emby_playback_history(self, user_id: str, library_id: str, media_type: str, played: bool = True,
+                                  limit: int = 50) -> List[dict]:
+        """
+        获取Emby用户的播放历史，根据库ID和媒体类型过滤结果，支持分页。
+        """
+        base_url = settings.EMBY_HOST
+        api_key = settings.EMBY_API_KEY
+
+        filter_type = "IsPlayed" if played else "IsResumable"
+        start_index = 0
+        all_items = []
+
+        while True:
+            url = f"{base_url}/emby/Users/{user_id}/Items"
+
+            params = {
+                "api_key": api_key,
+                "IncludeItemTypes": media_type,
+                "Fields": "ProviderIds",
+                "StartIndex": start_index,
+                "SortBy": "DatePlayed,SortName",
+                "SortOrder": "Descending",
+                "ParentId": library_id,
+                "ImageTypeLimit": 1,
+                "Recursive": True,
+                "HasImdbId": True,
+                "HasTmdbId": True,
+                "Filters": filter_type,
+                "Limit": limit
+            }
+
+            response = requests.get(url, params=params)
+
+            if response.status_code != 200:
+                logger.error(f"获取Emby播放历史失败: {response.status_code}")
+                break
+
+            data = response.json().get('Items', [])
+
+            if not data:
+                break  # 没有更多数据，退出循环
+
+            all_items.extend(data)
+
+            # 如果返回的数据量小于limit，说明没有更多数据，退出循环
+            if len(data) < limit:
+                break
+
+            # 否则继续请求下一页的数据
+            start_index += limit
+
+        return all_items
+
+    def _convert_emby_item_to_event_info(self, item: dict) -> WebhookEventInfo:
+        """
+        将Emby播放记录转换为 WebhookEventInfo 对象
+        """
+        return WebhookEventInfo(
+            event="media.scrobble",  # Emby的播放记录模拟为 scrobble 事件
+            item_type="TV" if item['Type'] == "Episode" else "Movie",  # 根据Emby类型映射
+            item_name=item.get('Name'),
+            item_id=item.get('Id'),
+            tmdb_id=item.get('ProviderIds', {}).get('Tmdb'),
+            season_id=str(item.get('ParentIndexNumber', '')),  # Season number
+            episode_id=str(item.get('IndexNumber', '')),  # Episode number
+            overview=item.get('Overview', ''),
+            percentage=item.get('UserData', {}).get('PlayedPercentage', 100),  # Played percentage
+            user_name=self._user,  # 假设当前Emby用户与Webhook用户相同
+            item_path=item.get('Path', ''),  # 假设我们有媒体路径信息
+            media_type=item['Type'],  # 媒体类型：Movie 或 Episode
+            image_url=item.get('PrimaryImageTag'),  # 如果有图片信息
+        )
+
+    def sync_emby_to_douban(self):
+        """
+        将Emby用户的播放记录按时间顺序同步到豆瓣，支持分页获取播放记录。
+        """
+
+        user_id = self._user
+        # 如果 base_url, api_key 或 user_id 为空，直接返回空列表
+        if not user_id:
+            logger.warning("Emby的user_id 为空，无法获取播放历史。")
+            return
+
+        emby_user_id = self.get_emby_user_id(user_id)
+        processed_items: Dict = self.get_data('data') or {}
+        libraries = self._emby_library_ids or []  # 用户选择的库ID
+        media_types = self._media_types or []  # 用户选择的媒体类型
+
+        if not libraries or not media_types:
+            logger.info("未选择任何库或媒体类型，跳过同步")
+            return
+
+        for library_id in libraries:
+            for media_type in media_types:
+                # 获取已播放的记录，处理分页
+                playback_history = self.get_emby_playback_history(emby_user_id, library_id, media_type, played=True)
+                for item in playback_history:
+                    event_info = self._convert_emby_item_to_event_info(item)
+                    if event_info.item_type == "TV":
+                        self._process_tv_show(event_info, processed_items, played=True)
+                    else:
+                        self._process_movie(event_info, processed_items, played=True)
+
+                # 获取继续播放的记录，处理分页
+                resumable_history = self.get_emby_playback_history(emby_user_id, library_id, media_type, played=False)
+                for item in resumable_history:
+                    event_info = self._convert_emby_item_to_event_info(item)
+                    if event_info.item_type == "TV":
+                        self._process_tv_show(event_info, processed_items, played=False)
+                    else:
+                        self._process_movie(event_info, processed_items, played=False)
+
+        logger.info("Emby播放记录同步完成")
 
     def get_dashboard(self, **kwargs) -> Optional[Tuple[Dict[str, Any], Dict[str, Any], List[dict]]]:
         cols = {
