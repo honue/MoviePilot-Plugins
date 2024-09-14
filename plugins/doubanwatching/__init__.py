@@ -1,7 +1,9 @@
 import threading
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Tuple, List
 
+import pytz
 import requests
 
 from app.chain.media import MediaChain
@@ -12,6 +14,7 @@ from app.plugins import _PluginBase
 from app.plugins.doubanwatching.DoubanHelper import DoubanHelper
 from app.schemas import WebhookEventInfo, MediaInfo
 from app.schemas.types import EventType, MediaType
+from apscheduler.schedulers.background import BackgroundScheduler
 import re
 from app.log import logger
 
@@ -26,7 +29,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.9.4"
+    plugin_version = "2.0.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -37,6 +40,10 @@ class DouBanWatching(_PluginBase):
     plugin_order = 15
     # 可使用的用户级别
     auth_level = 1
+
+    _scheduler = None
+    last_sync_time = None
+    slow_mode = False
 
     _enable = False
     _sync_history_once = False
@@ -76,13 +83,18 @@ class DouBanWatching(_PluginBase):
             logger.warn("检测到本插件旧版本数据，删除旧版本数据，避免报错...")
 
         if self._sync_history_once:
-            logger.info(f"根据条件同步所有历史记录到豆瓣，立即运行一次")
-            # todo
-            self.sync_emby_to_douban()
-
+            self._scheduler = BackgroundScheduler(timezone=settings.TZ)
+            logger.info(f"根据条件同步所有历史记录到豆瓣，立即运行一次。慢速模式已开启")
+            self._scheduler.add_job(func=self.sync_emby_to_douban, trigger='date',run_date=datetime.now(
+                                            tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3)
+                                        )
             self._sync_history_once = False
-        self.__update_config()
+            self.__update_config()
 
+        if self._scheduler is not None and self._scheduler.get_jobs():
+            # 启动服务
+            self._scheduler.print_jobs()
+            self._scheduler.start()
 
     def __update_config(self):
         self.update_config({
@@ -118,6 +130,7 @@ class DouBanWatching(_PluginBase):
                 logger.info(self.exclude_keyword(path=path, keywords=self._exclude).get("message", ""))
                 return
 
+            # todo 筛选媒体库
             if event_info.item_type == "TV" and "Series" in self._media_types:
                 self._process_tv_show(event_info, processed_items, played=played)
             elif "Movie" in self._media_types:
@@ -198,10 +211,19 @@ class DouBanWatching(_PluginBase):
 
     def _sync_to_douban(self, title: str, status: str, event_info: WebhookEventInfo, processed_items: Dict,
                         mediainfo: MediaInfo):
+        if self.last_sync_time is not None and self.slow_mode:
+            time_since_last_sync = time.time() - self.last_sync_time
+            if time_since_last_sync < 5:
+                sleep_time = 5 - time_since_last_sync
+                logger.debug(f"慢速模式，本次同步需要额外等待 {sleep_time:.2f} 秒")
+                time.sleep(sleep_time)
         logger.info(f"开始尝试获取 {title} 豆瓣id")
         douban_helper = DoubanHelper(user_cookie=self._cookie)
-        subject_name, subject_id = douban_helper.get_subject_id(title=title)
-
+        subject_id_tuple = douban_helper.get_subject_id(title=title)
+        if subject_id_tuple is None or subject_id_tuple is (None, None):
+            return
+        subject_name, subject_id = subject_id_tuple
+        self.last_sync_time = time.time()
         if subject_id:
             logger.info(f"查询：{title} => 匹配豆瓣：{subject_name} https://movie.douban.com/subject/{subject_id}/")
             ret = douban_helper.set_watching_status(subject_id=subject_id, status=status, private=self._private)
@@ -317,6 +339,7 @@ class DouBanWatching(_PluginBase):
                                             'model': 'user',
                                             'label': '媒体库用户名',
                                             'placeholder': '多个关键词以,分隔',
+                                            'required': True,
                                         }
                                     }
                                 ]
@@ -590,7 +613,8 @@ class DouBanWatching(_PluginBase):
         api_key = getattr(settings, 'EMBY_API_KEY', None)
         user_id = self._user
         # 如果 base_url, api_key 或 user_id 为空，直接返回空列表
-        if not base_url or not api_key or not user_id:
+        # todo 暂时不兼容多用户
+        if not base_url or not api_key or not user_id or "," in user_id:
             logger.warning("Emby的 base_url、api_key 或 user_id 为空，无法获取库信息。")
             return []
 
@@ -645,7 +669,7 @@ class DouBanWatching(_PluginBase):
                 "Fields": "ProviderIds",
                 "StartIndex": start_index,
                 "SortBy": "DatePlayed,SortName",
-                "SortOrder": "Descending",
+                "SortOrder": "Ascending",
                 "ParentId": library_id,
                 "ImageTypeLimit": 1,
                 "Recursive": True,
@@ -701,11 +725,19 @@ class DouBanWatching(_PluginBase):
         """
         将Emby用户的播放记录按时间顺序同步到豆瓣，支持分页获取播放记录。
         """
+        # 默认开启慢速模式
+        self.slow_mode = True
 
         user_id = self._user
-        # 如果 base_url, api_key 或 user_id 为空，直接返回空列表
+        # 如果 user_id 为空，直接返回空列表
         if not user_id:
             logger.warning("Emby的user_id 为空，无法获取播放历史。")
+            return
+
+        # 如果 user_id 为空，直接返回空列表
+        if "," in user_id:
+            # todo  暂时不兼容多用户
+            logger.warning("暂时不兼容多用户")
             return
 
         emby_user_id = self.get_emby_user_id(user_id)
@@ -724,7 +756,8 @@ class DouBanWatching(_PluginBase):
                 for item in playback_history:
                     event_info = self._convert_emby_item_to_event_info(item)
                     if event_info.item_type == "TV":
-                        self._process_tv_show(event_info, processed_items, played=True)
+                        logger.debug("未实现同步剧集")
+                        #self._process_tv_show(event_info, processed_items, played=True)
                     else:
                         self._process_movie(event_info, processed_items, played=True)
 
@@ -732,12 +765,15 @@ class DouBanWatching(_PluginBase):
                 resumable_history = self.get_emby_playback_history(emby_user_id, library_id, media_type, played=False)
                 for item in resumable_history:
                     event_info = self._convert_emby_item_to_event_info(item)
+                    logger.info(event_info)
                     if event_info.item_type == "TV":
-                        self._process_tv_show(event_info, processed_items, played=False)
+                        logger.debug("未实现同步剧集")
+                        #self._process_tv_show(event_info, processed_items, played=False)
                     else:
                         self._process_movie(event_info, processed_items, played=False)
 
         logger.info("Emby播放记录同步完成")
+        self.slow_mode = False
 
     def get_dashboard(self, **kwargs) -> Optional[Tuple[Dict[str, Any], Dict[str, Any], List[dict]]]:
         cols = {
