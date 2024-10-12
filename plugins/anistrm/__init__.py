@@ -58,7 +58,7 @@ class ANiStrm(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/anistrm.png"
     # 插件版本
-    plugin_version = "2.4"
+    plugin_version = "2.4.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -157,7 +157,7 @@ class ANiStrm(_PluginBase):
             # 链接
             link = DomUtils.tag_value(item, "link", default="")
             rss_info['title'] = title
-            rss_info['link'] = link.replace("resources.ani.rip", "aniopen.an-i.workers.dev")
+            rss_info['link'] = link.replace("resources.ani.rip", "openani.an-i.workers.dev")
             ret_array.append(rss_info)
         return ret_array
 
