@@ -20,7 +20,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.8"
+    plugin_version = "1.8.1"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
@@ -215,7 +215,6 @@ class BangumiSync(_PluginBase):
             "type": new_type,
             "comment": "",
             "private": False,
-            "tags": [""]
         }
         resp = self._request.post(url=f"https://api.bgm.tv/v0/users/-/collections/{subject_id}", json=post_data)
         if resp.status_code in [202, 204]:
