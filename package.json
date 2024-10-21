@@ -3,6 +3,7 @@
     "name": "ANi Strm",
     "description": "自动获取当季所有番剧，生成strm文件，mp刮削入库，emby直接播放，免去下载，轻松拥有一个番剧媒体库",
     "version": "2.4.1",
+    "v2": true,
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/anistrm.png",
     "author": "honue",
     "level": 2
@@ -11,6 +12,7 @@
     "name": "自适应IntroSkip",
     "description": "通过用户的暂停与播放动作，批量标记片头片尾",
     "version": "1.7.6",
+    "v2": true,
     "history": {
       "v1.7": "fix: 新入库剧集标记片头的一些错误，如遇到问题请重置插件。",
       "v1.6": "(火柴总定制版)",
@@ -25,6 +27,7 @@
     "name": "豆瓣书影音档案",
     "description": "将剧集在看、看完状态同步到豆瓣书影音档案。",
     "version": "1.9.4",
+    "v2": true,
     "history": {
       "v1.9.3": "修复了一些问题，新版本可以设定显示数量。",
       "v1.9.1": "删除旧版本数据，避免仪表盘报错",
@@ -45,6 +48,7 @@
     "name": "快捷指令",
     "description": "IOS快捷指令，快速选片添加订阅",
     "version": "1.5",
+    "v2": true,
     "history": {
       "v1.5": "修复 订阅&下载捷径，plugin_key未拼接的问题，目前捷径正常使用的无需变动。",
       "v1.4": "提供两个版本的快捷指令，限制种子最多返回50个，增加显示副标题，有用到下载的需要更新快捷指令",
@@ -58,6 +62,7 @@
     "name": "插件日志清理",
     "description": "定时清理插件产生的日志",
     "version": "1.1",
+    "v2": true,
     "history": {
       "v1.1": "t佬看不下去了，决定亲自出手",
       "v1.0": "插件选择列表优化",
@@ -70,6 +75,7 @@
   "BangumiRank": {
     "name": "Bangumi榜单订阅",
     "description": "Bangumi成员关注动画榜，时下流行番剧订阅，个人想看订阅",
+    "v2": true,
     "version": "1.4",
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/miku.jpg",
     "author": "honue",
@@ -78,6 +84,7 @@
   "FollowNotify": {
     "name": "收藏更新通知",
     "description": "在Emby上收藏剧集，当有新集更新时发送通知。适合针对性的获取剧集更新通知、榜单订阅时有不看的剧集不想收到更新通知。",
+    "v2": true,
     "version": "1.1",
     "icon": "like.jpg",
     "author": "honue",
@@ -87,6 +94,7 @@
     "name": "Bangumi打格子",
     "description": "将你在媒体库上的番剧观看，同步到Bangumi在看状态",
     "version": "1.8",
+    "v2": true,
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg",
     "author": "honue,happyTonakai",
     "level": 2,
