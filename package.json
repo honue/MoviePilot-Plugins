@@ -108,7 +108,7 @@
   "Transfer115": {
     "name": "115转移",
     "description": "将新入库的媒体文件，转移到115网盘",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png",
     "author": "honue",
     "level": 3

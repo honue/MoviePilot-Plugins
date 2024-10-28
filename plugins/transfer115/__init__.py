@@ -27,7 +27,7 @@ class Transfer115(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.1.0"
+    plugin_version = "0.1.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -177,8 +177,8 @@ class Transfer115(_PluginBase):
         try:
             p115_dest_folder, p115_dest_file_name = os.path.split(p115_dest)
 
-            if not self._fs.exists(p115_dest_folder):
-                self._fs.makedirs(p115_dest_folder)
+            if not self._client.exists(p115_dest_folder):
+                self._client.makedirs(p115_dest_folder)
                 logger.info(f'创建文件夹 {p115_dest_folder}')
 
             # 将本地媒体库文件上传
@@ -186,12 +186,12 @@ class Transfer115(_PluginBase):
             real_source = os.readlink(softlink_source)
             real_source_folder, real_source_file_name = os.path.split(real_source)
             logger.info(f'源文件路径 {real_source}')
-            if not self._fs.exists(p115_dest):
+            if not self._client.exists(p115_dest):
                 # 将文件上传到当前文件夹
-                self._fs.chdir(p115_dest_folder)
-                self._fs.upload(real_source)
+                self._client.chdir(p115_dest_folder)
+                self._client.upload(real_source)
                 # 将种子名重命名为媒体名
-                self._fs.rename(p115_dest_folder + '/' + real_source_file_name, p115_dest)
+                self._client.rename(p115_dest_folder + '/' + real_source_file_name, p115_dest)
             else:
                 logger.info(f'{p115_dest_file_name} 已存在')
             return True
