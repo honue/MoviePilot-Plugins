@@ -5,6 +5,10 @@ from datetime import datetime
 
 # Emby API 地址和授权标头
 base_url = settings.EMBY_HOST
+
+if base_url is None:
+    logger.error('请配置EMBY_HOST变量')
+
 if not base_url.endswith("/"):
     base_url += "/"
 if not base_url.startswith("http"):
