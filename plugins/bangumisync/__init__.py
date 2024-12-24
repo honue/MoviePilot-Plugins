@@ -68,7 +68,7 @@ class BangumiSync(_PluginBase):
         if event_info.user_name not in self._user.split(','):
             return
         play_start = {"playback.start", "media.play", "PlaybackStart"}
-        # 不是播放停止事件, 或观看进度不足80% 不处理
+        # 不是播放停止事件, 或观看进度不足90% 不处理
         if not (event_info.event in play_start or event_info.percentage and event_info.percentage > 90):
             return
         # 根据路径判断是不是番剧
