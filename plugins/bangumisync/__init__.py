@@ -59,20 +59,24 @@ class BangumiSync(_PluginBase):
 
     @eventmanager.register(EventType.WebhookMessage)
     def hook(self, event: Event):
-        logger.debug(f"收到webhook事件: {event.event_data}")
-        event_info: WebhookEventInfo = event.event_data
-        # 只判断开始播放的TV剧集是不是anime 调试加入暂停
-        play_start = "playback.start|media.play|PlaybackStart".split('|')
-        # 根据路径判断是不是番剧
-        path = event_info.item_path
+        # 插件未启用
         if not self._enable:
             return
+        logger.debug(f"收到webhook事件: {event.event_data}")
+        event_info: WebhookEventInfo = event.event_data
+        # 不是指定用户, 不处理
+        if event_info.user_name not in self._user.split(','):
+            return
+        play_start = {"playback.start", "media.play", "PlaybackStart"}
+        # 不是播放停止事件, 或观看进度不足90% 不处理
+        if not (event_info.event in play_start or event_info.percentage and event_info.percentage > 90):
+            return
+        # 根据路径判断是不是番剧
+        path = event_info.item_path
         if not BangumiSync.is_anime(path):
             return
 
-        if event_info.item_type in ["TV"] and \
-                event_info.event in play_start and \
-                event_info.user_name in self._user.split(','):
+        if event_info.item_type in ["TV"]:
             """
                 event='playback.pause' channel='emby' item_type='TV' item_name='咒术回战 S1E47 关门' item_id='22646' item_path='/media/cartoon/动漫/咒术回战 (2020)/Season 1/咒术回战 - S01E47 - 第 47 集.mkv' season_id=1 episode_id=47 tmdb_id=None overview='渋谷事変の最終局面に呪術師が集うなかで、脹相は夏油の亡骸に寄生する“黒幕”の正体に気付く。そして、絶体絶命の危機に現れた特級術師・九十九由基。九十九と“黒幕”がそれぞれ語る人類の未来（ネクストステージ...' percentage=2.5705228512861966 ip='127.0.0.1' device_name='Chrome Windows' client='Emby Web' user_name='honue' image_url=None item_favorite=None save_reason=None item_isvirtual=None media_type='Episode'
             """
@@ -256,7 +260,7 @@ class BangumiSync(_PluginBase):
         """
         通过路径关键词来确定是不是anime媒体库
         """
-        path_keyword = "cartoon,动漫,动画,ani,anime,新番,番剧,特摄,bangumi,ova,映画,国漫,日漫"
+        path_keyword = "日番,cartoon,动漫,动画,ani,anime,新番,番剧,特摄,bangumi,ova,映画,国漫,日漫"
         path = path.lower()  # Convert path to lowercase to make the check case-insensitive
         for keyword in path_keyword.split(','):
             if path.count(keyword):
