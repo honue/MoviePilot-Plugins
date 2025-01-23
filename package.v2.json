@@ -1,0 +1,33 @@
+{
+  "AdaptiveIntroSkip": {
+    "name": "自适应IntroSkip",
+    "description": "通过用户的暂停与播放动作，批量标记片头片尾",
+    "version": "2.0.1",
+    "v2": true,
+    "history": {
+      "2.0.1": "适配MP V2新的Emby配置获取方法",
+      "v1.7": "fix: 新入库剧集标记片头的一些错误，如遇到问题请重置插件。",
+      "v1.6": "(火柴总定制版)",
+      "v1.5": "时间支持 分:秒 格式",
+      "v1.4": "增加用户事件筛选"
+    },
+    "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png",
+    "author": "honue",
+    "level": 1
+  },
+  "CleanLogs": {
+    "name": "插件日志清理",
+    "description": "定时清理插件产生的日志",
+    "version": "2.1",
+    "v2": true,
+    "history": {
+      "": "适配MP V2新的方法",
+      "v1.1": "t佬看不下去了，决定亲自出手",
+      "v1.0": "插件选择列表优化",
+      "v0.2": "好像删错了...，删除逻辑应该是保留末尾{row}行。"
+    },
+    "icon": "clean.png",
+    "author": "honue",
+    "level": 1
+  }
+}
