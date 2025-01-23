@@ -1,20 +1,25 @@
 import requests
-from app.core.config import settings
+from app.helper.mediaserver import MediaServerHelper
+from app.helper.service import ServiceBaseHelper
+from app.schemas import MediaServerConf
+from app.schemas.types import SystemConfigKey, ModuleType
 from app.log import logger
 from datetime import datetime
 
 # Emby API 地址和授权标头
-base_url = settings.EMBY_HOST
+ServiceBase_Helper = ServiceBaseHelper(SystemConfigKey.MediaServers,MediaServerConf,ModuleType.MediaServer)
+media_server_config = ServiceBase_Helper.get_configs()
+emby_config = media_server_config['EMBY'].config
+base_url = emby_config['host']
 
 if base_url is None:
-    logger.error('请配置EMBY_HOST变量')
+    logger.error('请配置EMBY服务器')
 
 if not base_url.endswith("/"):
     base_url += "/"
 if not base_url.startswith("http"):
     base_url = "http://" + base_url
-api_key = settings.EMBY_API_KEY
-headers = {'X-Emby-Token': api_key}
+api_key = emby_config['apikey']
 
 
 def format_time(seconds):
