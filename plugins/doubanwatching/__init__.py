@@ -23,7 +23,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.9.4"
+    plugin_version = "1.9.5"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -84,8 +84,10 @@ class DouBanWatching(_PluginBase):
 
             if event_info.item_type == "TV":
                 self._process_tv_show(event_info, processed_items, played=played)
-            else:
+            elif event_info.item_type == "MOV":
                 self._process_movie(event_info, processed_items, played=played)
+            else:
+                return
 
     @eventmanager.register(EventType.WebhookMessage)
     def sync_played(self, event: Event):
