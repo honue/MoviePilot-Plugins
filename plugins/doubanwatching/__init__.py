@@ -93,8 +93,14 @@ class DouBanWatching(_PluginBase):
     def sync_played(self, event: Event):
         event_info: WebhookEventInfo = event.event_data
         played = {'item.markplayed', 'media.scrobble'}
+        is_played = event_info.event in played
+        if event_info.channel == "jellyfin":
+            # this is a temporary solution for jellyfin.
+            # a better solution should be resolving the
+            # played information in the jellyfin module
+            is_played = event_info.event == 'UserDataSaved' and event_info.save_reason == 'TogglePlayed'
 
-        if event_info.event in played and event_info.user_name in self._user.split(','):
+        if is_played and event_info.user_name in self._user.split(','):
             with lock:
                 self.sync_log(event=event, played=True)
 
