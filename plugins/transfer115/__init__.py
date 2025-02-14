@@ -8,9 +8,11 @@ import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 from p115 import P115Client, P115FileSystem
 
+from app.api.endpoints.history import download_history, transfer_history
 from app.core.config import settings
 from app.core.event import eventmanager, Event
 from app.db.subscribe_oper import SubscribeOper
+from app.db.models.transferhistory import TransferHistory
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas import TransferInfo, MediaInfo
@@ -83,6 +85,15 @@ class Transfer115(_PluginBase):
             logger.error(f'请检查填写cookie')
             self._enable = False
             return
+        file_num = int(os.getenv('FULL_RECENT', '0')) if os.getenv('FULL_RECENT', '0').isdigit() else 0
+        if file_num:
+            recent_files = [transfer_history.dest for transfer_history in TransferHistory.list_by_page(count=file_num)]
+            logger.info(f"补全 {len(recent_files)} \n {recent_files}")
+            with lock:
+                # 等待转移的文件的软链接的完整路径
+                waiting_process_list = self.get_data('waiting_process_list') or []
+                waiting_process_list = waiting_process_list + recent_files
+                self.save_data('waiting_process_list', waiting_process_list)
 
         self._scheduler = BackgroundScheduler(timezone=settings.TZ)
 
@@ -160,14 +171,14 @@ class Transfer115(_PluginBase):
                 if self._upload_file(softlink_source=softlink_source, p115_dest=p115_dest):
                     process_list.remove(softlink_source)
                     logger.info(f'【{total_num - len(process_list)}/{total_num}】 上传成功 {softlink_source} {p115_dest}')
-                    # 上传成功 软链接 更改为 clouddrive2 挂载的路径
-                    cd2_dest = p115_dest.replace(self._p115_media_prefix_path, self._cd_mount_prefix_path)
-                    softlink_dir = os.path.dirname(softlink_source)
-                    if not os.path.exists(softlink_dir):
-                        logger.info(f'软链接文件夹不存在 创建文件夹 {softlink_dir}')
-                        os.makedirs(softlink_dir)
-                    subprocess.run(['ln', '-sf', cd2_dest, softlink_source])
-                    logger.info(f'更新软链接: {softlink_source} -> 云盘文件: {cd2_dest}')
+                    # # 上传成功 软链接 更改为 clouddrive2 挂载的路径
+                    # cd2_dest = p115_dest.replace(self._p115_media_prefix_path, self._cd_mount_prefix_path)
+                    # softlink_dir = os.path.dirname(softlink_source)
+                    # if not os.path.exists(softlink_dir):
+                    #     logger.info(f'软链接文件夹不存在 创建文件夹 {softlink_dir}')
+                    #     os.makedirs(softlink_dir)
+                    # subprocess.run(['ln', '-sf', cd2_dest, softlink_source])
+                    # logger.info(f'更新软链接: {softlink_source} -> 云盘文件: {cd2_dest}')
                 else:
                     logger.error(f'上传失败 {softlink_source} {p115_dest}')
                 self.save_data('waiting_process_list', process_list)
