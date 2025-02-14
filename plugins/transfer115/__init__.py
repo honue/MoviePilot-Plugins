@@ -181,6 +181,8 @@ class Transfer115(_PluginBase):
                     # logger.info(f'更新软链接: {softlink_source} -> 云盘文件: {cd2_dest}')
                 else:
                     logger.error(f'上传失败 {softlink_source} {p115_dest}')
+                    logger.error(f'上传出现错误，中止上传')
+                    break
                 self.save_data('waiting_process_list', process_list)
 
     def _upload_file(self, softlink_source: str = None, p115_dest: str = None) -> bool:
