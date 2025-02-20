@@ -76,7 +76,7 @@
     "name": "Bangumi榜单订阅",
     "description": "Bangumi成员关注动画榜，时下流行番剧订阅，个人想看订阅",
     "v2": true,
-    "version": "1.4",
+    "version": "1.5",
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/miku.jpg",
     "author": "honue",
     "level": 2

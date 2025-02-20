@@ -28,7 +28,7 @@ class BangumiRank(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/miku.jpg"
     # 插件版本
-    plugin_version = "1.4"
+    plugin_version = "1.5"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -252,8 +252,8 @@ class BangumiRank(_PluginBase):
                                         'component': 'VTextField',
                                         'props': {
                                             'model': 'uid',
-                                            'label': 'Bangumi uid(数字)',
-                                            'placeholder': '233333'
+                                            'label': 'Bangumi username',
+                                            'placeholder': 'id现在好像不行了 请设置username'
                                         }
                                     }
                                 ]
@@ -493,15 +493,14 @@ class BangumiRank(_PluginBase):
         刷新RSS
         """
         addr_list = []
-        # 'https://rsshub.app/bangumi/tv/followrank'
-        # 'https://rsshub.app/bangumi/tv/user/wish/{uid}'
+
         if self._uid and self._wish_top:
-            addr_list.append(f"https://rsshub.app/bangumi/tv/user/wish/{self._uid}?limit={self._wish_top}")
+            addr_list.append(f"https://rsshub.app/bangumi.tv/user/collections/{self._uid}/2/1?limit={self._wish_top}")
         else:
-            logger.info(f"未设置uid或wish_top，不执行想看订阅")
+            logger.info(f"未设置username或wish_top，不执行想看订阅")
 
         if self._rank_top:
-            addr_list.append(f"https://rsshub.app/bangumi/tv/followrank?limit={self._rank_top}")
+            addr_list.append(f"http://rsshub.app/bangumi.tv/anime/followrank?limit={self._rank_top}")
         else:
             logger.info(f"未设置rank_top，不执行榜单订阅")
 
