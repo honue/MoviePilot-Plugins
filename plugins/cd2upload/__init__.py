@@ -29,7 +29,7 @@ class Cd2Upload(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.2"
+    plugin_version = "0.0.3"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -86,9 +86,8 @@ class Cd2Upload(_PluginBase):
         if self._onlyonce:
             # 清理无效软链接
             self._scheduler.add_job(func=self.clean, trigger='date',
-                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=2),
+                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
                                     name="清理无效软链接")
-
             self._scheduler.add_job(func=self.task, trigger='date',
                                     run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=10),
                                     name="cd2转移")
@@ -134,6 +133,10 @@ class Cd2Upload(_PluginBase):
                                             run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(
                                                 minutes=self._cron),
                                             name="cd2转移")
+                    # 清理无效软链接
+                    self._scheduler.add_job(func=self.clean, trigger='date',
+                                            run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=5),
+                                            name="清理无效软链接")
                 except Exception as err:
                     logger.error(f"定时任务配置错误：{str(err)}")
             else:
@@ -163,16 +166,10 @@ class Cd2Upload(_PluginBase):
                     process_list.remove(softlink_source)
                     processed_list.append(softlink_source)
                     logger.info(f'【{total_num - len(process_list)}/{total_num}】 上传成功 {softlink_source} {cd2_dest}')
-                    # # 上传成功 strm 写入 clouddrive2 挂载的路径
-                    strm_file_path = os.path.splitext(softlink_source)[0] + '-STRM.strm'
-                    with open(strm_file_path, "w") as strm_file:
-                        strm_file.write(cd2_dest)
-                    logger.info(f"{strm_file_path} 中写入 {cd2_dest}")
-                    self.save_data('waiting_process_list', process_list)
-                    self.save_data('processed_list', processed_list)
                 else:
                     logger.error(f'上传失败 {softlink_source} {cd2_dest}')
                     continue
+            logger.info("上传完毕，STRM文件将在链接文件失效后生成")
 
     def _upload_file(self, softlink_source: str = None, cd2_dest: str = None) -> bool:
         logger.info('')
@@ -203,8 +200,16 @@ class Cd2Upload(_PluginBase):
             for file in waiting_process_list:
                 if os.path.islink(file) and not os.path.exists(file):
                     os.remove(file)
-                    logger.info(f"删除软链接 {file}")
+                    logger.info(f"删除本地链接文件 {file}")
                     processed_list.remove(file)
+
+                    cd2_dest = file.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)
+                    # 当本地链接失效时 strm 写入 clouddrive2 挂载的路径
+                    strm_file_path = os.path.splitext(file)[0] + '.strm'
+                    with open(strm_file_path, "w") as strm_file:
+                        strm_file.write(cd2_dest)
+                    logger.info(f"{cd2_dest} 写入STRM文件-> {strm_file_path} ")
+
             self.save_data('processed_list', processed_list)
 
     def get_state(self) -> bool:
