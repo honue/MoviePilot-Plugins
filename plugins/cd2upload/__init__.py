@@ -164,7 +164,7 @@ class Cd2Upload(_PluginBase):
                     processed_list.append(softlink_source)
                     logger.info(f'【{total_num - len(process_list)}/{total_num}】 上传成功 {softlink_source} {cd2_dest}')
                     # # 上传成功 strm 写入 clouddrive2 挂载的路径
-                    strm_file_path = os.path.splitext(softlink_source)[0] + '.strm'
+                    strm_file_path = os.path.splitext(softlink_source)[0] + '-STRM.strm'
                     with open(strm_file_path, "w") as strm_file:
                         strm_file.write(cd2_dest)
                     logger.info(f"{strm_file_path} 中写入 {cd2_dest}")
