@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import threading
 from datetime import datetime, timedelta
@@ -6,11 +7,10 @@ from typing import List, Tuple, Dict, Any
 
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
-from p115 import P115Client, P115FileSystem
 
-from app.api.endpoints.history import download_history, transfer_history
 from app.core.config import settings
 from app.core.event import eventmanager, Event
+from app.db import get_db
 from app.db.subscribe_oper import SubscribeOper
 from app.db.models.transferhistory import TransferHistory
 from app.log import logger
@@ -21,21 +21,21 @@ from app.schemas.types import EventType, SystemConfigKey
 lock = threading.Lock()
 
 
-class Transfer115(_PluginBase):
+class Cd2Upload(_PluginBase):
     # 插件名称
-    plugin_name = "115转移"
+    plugin_name = "cd2上传"
     # 插件描述
-    plugin_desc = "将新入库的媒体文件，转移到115"
+    plugin_desc = "将新入库的媒体文件，通过cd2上传生成strm（自用）"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.1.2"
+    plugin_version = "0.0.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
     author_url = "https://github.com/honue"
     # 插件配置项ID前缀
-    plugin_config_prefix = "transfer115_"
+    plugin_config_prefix = "cd2upload_"
     # 加载顺序
     plugin_order = 19
     # 可使用的用户级别
@@ -44,20 +44,11 @@ class Transfer115(_PluginBase):
     _enable = True
     _cron = '20'
     _onlyonce = False
-    # 软链接前缀
-    _softlink_prefix_path = '/softlink/'
-    # 115网盘媒体库路径前缀
-    _p115_media_prefix_path = '/emby/'
+
+    # 链接前缀
+    _softlink_prefix_path = '/strm/'
     # cd2挂载本地媒体库前缀
-    _cd_mount_prefix_path = '/CloudNAS/CloudDrive/115/emby/'
-
-    _server = ''
-    _username = ''
-    _password = ''
-    _cookie = ''
-
-    _client = None
-    _fs = None
+    _cd_mount_prefix_path = '/CloudNAS/115/emby/'
 
     _scheduler = None
 
@@ -69,8 +60,8 @@ class Transfer115(_PluginBase):
             self._cron: int = int(config.get('cron', '20'))
             self._onlyonce = config.get('onlyonce', False)
             self._cookie = config.get('cookie', '')
-            self._softlink_prefix_path = config.get('softlink_prefix_path', '/downloads/link/')
-            self._p115_media_prefix_path = config.get('p115_media_prefix_path', '/emby/')
+            self._softlink_prefix_path = config.get('softlink_prefix_path', '/strm/')
+            # 用于修改链接
             self._cd_mount_prefix_path = config.get('cd_mount_prefix_path', '/CloudNAS/CloudDrive/115/emby/')
 
         self.stop_service()
@@ -78,19 +69,14 @@ class Transfer115(_PluginBase):
         if not self._enable:
             return
 
-        if self._cookie:
-            self._client = P115Client(self._cookie)
-            self._fs = P115FileSystem(self._client)
-        else:
-            logger.error(f'请检查填写cookie')
-            self._enable = False
-            return
+        # 待定
         file_num = int(os.getenv('FULL_RECENT', '0')) if os.getenv('FULL_RECENT', '0').isdigit() else 0
         if file_num:
-            recent_files = [transfer_history.dest for transfer_history in TransferHistory.list_by_page(count=file_num)]
+            recent_files = [transfer_history.dest for transfer_history in
+                            TransferHistory.list_by_page(count=file_num, db=get_db())]
             logger.info(f"补全 {len(recent_files)} \n {recent_files}")
             with lock:
-                # 等待转移的文件的软链接的完整路径
+                # 等待转移的文件的链接的完整路径
                 waiting_process_list = self.get_data('waiting_process_list') or []
                 waiting_process_list = waiting_process_list + recent_files
                 self.save_data('waiting_process_list', waiting_process_list)
@@ -98,17 +84,20 @@ class Transfer115(_PluginBase):
         self._scheduler = BackgroundScheduler(timezone=settings.TZ)
 
         if self._onlyonce:
+            # 清理无效软链接
+            self._scheduler.add_job(func=self.clean, trigger='date',
+                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=2),
+                                    name="清理无效软链接")
+
             self._scheduler.add_job(func=self.task, trigger='date',
-                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-                                    name="转移115")
-            logger.info(f"115转移，立即运行一次")
+                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=10),
+                                    name="cd2转移")
+            logger.info(f"cd2转移，立即运行一次")
 
             self.update_config({
                 'enable': self._enable,
                 'cron': self._cron,
                 'onlyonce': False,
-                'cookie': self._cookie,
-                'p115_media_prefix_path': self._p115_media_prefix_path,
                 'softlink_prefix_path': self._softlink_prefix_path,
                 'cd_mount_prefix_path': self._cd_mount_prefix_path
             })
@@ -124,7 +113,7 @@ class Transfer115(_PluginBase):
         if not transfer_info.file_list_new:
             return
         with lock:
-            # 等待转移的文件的软链接的完整路径
+            # 等待转移的文件的链接的完整路径
             waiting_process_list = self.get_data('waiting_process_list') or []
             waiting_process_list = waiting_process_list + transfer_info.file_list_new
             self.save_data('waiting_process_list', waiting_process_list)
@@ -144,7 +133,7 @@ class Transfer115(_PluginBase):
                     self._scheduler.add_job(func=self.task, trigger='date',
                                             run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(
                                                 minutes=self._cron),
-                                            name="转移115")
+                                            name="cd2转移")
                 except Exception as err:
                     logger.error(f"定时任务配置错误：{str(err)}")
             else:
@@ -153,12 +142,14 @@ class Transfer115(_PluginBase):
                 self._scheduler.remove_all_jobs()
                 self._scheduler.add_job(func=self.task, trigger='date',
                                         run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=5),
-                                        name="转移115")
+                                        name="cd2转移")
             self._scheduler.start()
 
     def task(self):
         with (lock):
             waiting_process_list = self.get_data('waiting_process_list') or []
+            processed_list = self.get_data('processed_list') or []
+
             if not waiting_process_list:
                 logger.info('没有需要转移的媒体文件')
                 return
@@ -166,51 +157,55 @@ class Transfer115(_PluginBase):
             process_list = waiting_process_list.copy()
             total_num = len(waiting_process_list)
             for softlink_source in waiting_process_list:
-                # 软链接目录前缀 替换为 115网盘 目录前缀  这个文件的115保存路径
-                p115_dest = softlink_source.replace(self._softlink_prefix_path, self._p115_media_prefix_path)
-                if self._upload_file(softlink_source=softlink_source, p115_dest=p115_dest):
+                # 链接目录前缀 替换为 cd2挂载前缀
+                cd2_dest = softlink_source.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)
+                if self._upload_file(softlink_source=softlink_source, cd2_dest=cd2_dest):
                     process_list.remove(softlink_source)
-                    logger.info(f'【{total_num - len(process_list)}/{total_num}】 上传成功 {softlink_source} {p115_dest}')
-                    # # 上传成功 软链接 更改为 clouddrive2 挂载的路径
-                    # cd2_dest = p115_dest.replace(self._p115_media_prefix_path, self._cd_mount_prefix_path)
-                    # softlink_dir = os.path.dirname(softlink_source)
-                    # if not os.path.exists(softlink_dir):
-                    #     logger.info(f'软链接文件夹不存在 创建文件夹 {softlink_dir}')
-                    #     os.makedirs(softlink_dir)
-                    # subprocess.run(['ln', '-sf', cd2_dest, softlink_source])
-                    # logger.info(f'更新软链接: {softlink_source} -> 云盘文件: {cd2_dest}')
+                    processed_list.append(softlink_source)
+                    logger.info(f'【{total_num - len(process_list)}/{total_num}】 上传成功 {softlink_source} {cd2_dest}')
+                    # # 上传成功 strm 写入 clouddrive2 挂载的路径
+                    strm_file_path = os.path.splitext(softlink_source)[0] + '.strm'
+                    with open(strm_file_path, "w") as strm_file:
+                        strm_file.write(cd2_dest)
+                    logger.info(f"{strm_file_path} 中写入 {cd2_dest}")
+                    self.save_data('waiting_process_list', process_list)
+                    self.save_data('processed_list', processed_list)
                 else:
-                    logger.error(f'上传失败 {softlink_source} {p115_dest}')
-                    logger.error(f'上传出现错误，中止上传')
-                    break
-                self.save_data('waiting_process_list', process_list)
+                    logger.error(f'上传失败 {softlink_source} {cd2_dest}')
+                    continue
 
-    def _upload_file(self, softlink_source: str = None, p115_dest: str = None) -> bool:
+    def _upload_file(self, softlink_source: str = None, cd2_dest: str = None) -> bool:
         logger.info('')
         try:
-            p115_dest_folder, p115_dest_file_name = os.path.split(p115_dest)
+            cd2_dest_folder, cd2_dest_file_name = os.path.split(cd2_dest)
 
-            if not self._fs.exists(p115_dest_folder):
-                self._fs.makedirs(p115_dest_folder)
-                logger.info(f'创建文件夹 {p115_dest_folder}')
+            if not os.path.exists(cd2_dest_folder):
+                os.makedirs(cd2_dest_folder)
+                logger.info(f'创建文件夹 {cd2_dest_folder}')
 
-            # 将本地媒体库文件上传
-            # 获取软链接的真实文件路径 用于上传
             real_source = os.readlink(softlink_source)
-            real_source_folder, real_source_file_name = os.path.split(real_source)
             logger.info(f'源文件路径 {real_source}')
-            if not self._fs.exists(p115_dest):
-                # 将文件上传到当前文件夹
-                self._fs.chdir(p115_dest_folder)
-                self._client.upload_file(real_source, pid=self._fs.getcid())
-                # 将种子名重命名为媒体名
-                self._fs.rename(p115_dest_folder + '/' + real_source_file_name, p115_dest)
+
+            if not os.path.exists(cd2_dest):
+                # 将文件上传到当前文件夹 同步
+                shutil.copy2(softlink_source, cd2_dest, follow_symlinks=True)
             else:
-                logger.info(f'{p115_dest_file_name} 已存在')
+                logger.info(f'{cd2_dest_file_name} 已存在 {cd2_dest}')
             return True
         except Exception as e:
             logger.error(e)
             return False
+
+    def clean(self):
+        with lock:
+            waiting_process_list = self.get_data('processed_list') or []
+            processed_list = waiting_process_list.copy()
+            for file in waiting_process_list:
+                if os.path.islink(file) and not os.path.exists(file):
+                    os.remove(file)
+                    logger.info(f"删除软链接 {file}")
+                    processed_list.remove(file)
+            self.save_data('processed_list', processed_list)
 
     def get_state(self) -> bool:
         return self._enable
@@ -287,28 +282,6 @@ class Transfer115(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 12
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'cookie',
-                                            'label': '115 cookie',
-                                            'placeholder': "UID=...;CID=...;SEID=..."
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
                                     'md': 4
                                 },
                                 'content': [
@@ -316,25 +289,8 @@ class Transfer115(_PluginBase):
                                         'component': 'VTextField',
                                         'props': {
                                             'model': 'softlink_prefix_path',
-                                            'label': '本地软链接媒体库路径前缀',
-                                            'placeholder': '/softlink/'
-                                        }
-                                    }
-                                ]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 4
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'p115_media_prefix_path',
-                                            'label': '115媒体库路径前缀',
-                                            'placeholder': '/emby/'
+                                            'label': '本地链接媒体库路径前缀',
+                                            'placeholder': '/strm/'
                                         }
                                     }
                                 ]
@@ -350,7 +306,7 @@ class Transfer115(_PluginBase):
                                         'props': {
                                             'model': 'cd_mount_prefix_path',
                                             'label': 'cd2挂载媒体库路径前缀',
-                                            'placeholder': '/CloudNAS/CloudDrive/115/emby/'
+                                            'placeholder': '/CloudNAS/115/emby/'
                                         }
                                     }
                                 ]
@@ -363,50 +319,12 @@ class Transfer115(_PluginBase):
             'enable': self._enable,
             'cron': self._cron,
             'onlyonce': self._onlyonce,
-            'cookie': self._cookie,
-            'p115_media_prefix_path': self._p115_media_prefix_path,
             'softlink_prefix_path': self._softlink_prefix_path,
             'cd_mount_prefix_path': self._cd_mount_prefix_path
         }
 
     def get_api(self) -> List[Dict[str, Any]]:
-        return [
-            {
-                "path": "/update_cookie",
-                "endpoint": self.update_cookie,
-                "methods": ["GET", "POST"],
-                "summary": "更新115cookie",
-                "description": "更新115cookie",
-            }
-        ]
-
-    def update_cookie(self, cookie, plugin_key):
-        if settings.API_TOKEN != plugin_key:
-            logger.error(f"plugin_key错误：{plugin_key}")
-            return f"plugin_key错误：{plugin_key}"
-        else:
-            # 更新插件 cookie
-            self._cookie = cookie
-            self.update_config({
-                'enable': self._enable,
-                'cron': self._cron,
-                'onlyonce': False,
-                'cookie': self._cookie,
-                'p115_media_prefix_path': self._p115_media_prefix_path,
-                'softlink_prefix_path': self._softlink_prefix_path,
-                'cd_mount_prefix_path': self._cd_mount_prefix_path
-            })
-
-            # 更新mp 115 cookie
-            parts = cookie.split(';')
-            cookie_data = {}
-            for part in parts:
-                if '=' in part:
-                    key, value = part.split('=', 1)
-                    cookie_data[key] = value
-            self.systemconfig.set(SystemConfigKey.User115Params, cookie_data)
-
-            return "更新115cookie成功"
+        return []
 
     def get_page(self) -> List[dict]:
         pass

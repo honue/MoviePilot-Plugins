@@ -106,10 +106,10 @@
       "v1.4": "增加文件名规则；避免大小写导致的番剧无法匹配"
     }
   },
-  "Transfer115": {
-    "name": "115转移",
-    "description": "将新入库的媒体文件，转移到115网盘",
-    "version": "0.1.2",
+  "Cd2Upload": {
+    "name": "cd2上传",
+    "description": "将新入库的媒体文件，通过cd2上传生成strm（自用）",
+    "version": "0.0.2",
     "v2": true,
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png",
     "author": "honue",
