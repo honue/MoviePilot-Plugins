@@ -197,6 +197,7 @@ class Cd2Upload(_PluginBase):
         with lock:
             waiting_process_list = self.get_data('processed_list') or []
             processed_list = waiting_process_list.copy()
+            logger.info(f"已处理列表：{processed_list}")
             for file in waiting_process_list:
                 if os.path.islink(file) and not os.path.exists(file):
                     os.remove(file)
@@ -209,7 +210,8 @@ class Cd2Upload(_PluginBase):
                     with open(strm_file_path, "w") as strm_file:
                         strm_file.write(cd2_dest)
                     logger.info(f"{cd2_dest} 写入STRM文件-> {strm_file_path} ")
-
+                else:
+                    logger.info(f"{file} 未失效 跳过")
             self.save_data('processed_list', processed_list)
 
     def get_state(self) -> bool:
