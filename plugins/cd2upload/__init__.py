@@ -30,7 +30,7 @@ class Cd2Upload(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.5"
+    plugin_version = "0.0.6"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -162,7 +162,8 @@ class Cd2Upload(_PluginBase):
             if not waiting_process_list:
                 logger.info('没有需要转移的媒体文件')
                 return
-            logger.info(f'开始执行上传任务 {waiting_process_list}')
+            logger.info('strm文件将在源文件被清理后生成 软链接符号将被替换 strm和链接符号只会存在一个')
+            logger.info(f'开始执行上传任务 {waiting_process_list} ')
             process_list = waiting_process_list.copy()
             total_num = len(waiting_process_list)
             for softlink_source in waiting_process_list:
@@ -205,23 +206,41 @@ class Cd2Upload(_PluginBase):
             processed_list = waiting_process_list.copy()
             logger.info(f"已处理列表：{processed_list}")
             logger.debug(f"cleanlink {cleanlink}")
+
             for file in waiting_process_list:
-                if cleanlink:
-                    os.remove(os.readlink(file))
+                if not os.path.islink(file):
                     processed_list.remove(file)
-                    logger.info(f"清除源文件 {os.readlink(file)}")
+                    logger.info(f"软链接符号不存在 {file}")
+                    continue
+                if cleanlink and os.path.islink(file):
+                    try:
+                        target_file = os.readlink(file)
+                        os.remove(target_file)
+                        logger.info(f"清除源文件 {target_file}")
+                    except FileNotFoundError:
+                        logger.warning(f"无法删除 {file} 指向的目标文件，目标文件不存在")
+                    except OSError as e:
+                        logger.error(f"删除 {file} 目标文件失败: {e}")
+
                 if os.path.islink(file) and not os.path.exists(file):
                     os.remove(file)
                     processed_list.remove(file)
                     logger.info(f"删除本地链接文件 {file}")
+
+                    # 构造 CloudDrive2 目标路径
                     cd2_dest = file.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)
-                    # 当本地链接失效时 strm 写入 clouddrive2 挂载的路径
                     strm_file_path = os.path.splitext(file)[0] + '.strm'
-                    with open(strm_file_path, "w") as strm_file:
-                        strm_file.write(cd2_dest)
-                    logger.info(f"{cd2_dest} 写入STRM文件-> {strm_file_path} ")
+
+                    try:
+                        with open(strm_file_path, "w") as strm_file:
+                            strm_file.write(cd2_dest)
+                        logger.info(f"{cd2_dest} 写入STRM文件 -> {strm_file_path}")
+                    except OSError as e:
+                        logger.error(f"写入 STRM 文件失败: {e}")
+
                 else:
-                    logger.debug(f"{file} 未失效 跳过")
+                    logger.debug(f"{file} 未失效，跳过")
+
             self.save_data('processed_list', processed_list)
 
     def get_state(self) -> bool:
