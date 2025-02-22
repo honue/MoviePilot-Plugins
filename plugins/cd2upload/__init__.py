@@ -30,7 +30,7 @@ class Cd2Upload(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.4"
+    plugin_version = "0.0.5"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -204,13 +204,16 @@ class Cd2Upload(_PluginBase):
             waiting_process_list = self.get_data('processed_list') or []
             processed_list = waiting_process_list.copy()
             logger.info(f"已处理列表：{processed_list}")
+            logger.debug(f"cleanlink {cleanlink}")
             for file in waiting_process_list:
                 if cleanlink:
                     os.remove(os.readlink(file))
+                    processed_list.remove(file)
+                    logger.info(f"清除源文件 {os.readlink(file)}")
                 if os.path.islink(file) and not os.path.exists(file):
                     os.remove(file)
-                    logger.info(f"删除本地链接文件 {file}")
                     processed_list.remove(file)
+                    logger.info(f"删除本地链接文件 {file}")
                     cd2_dest = file.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)
                     # 当本地链接失效时 strm 写入 clouddrive2 挂载的路径
                     strm_file_path = os.path.splitext(file)[0] + '.strm'
