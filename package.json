@@ -109,7 +109,7 @@
   "Cd2Upload": {
     "name": "cd2上传",
     "description": "将新入库的媒体文件，通过cd2上传生成strm（自用）",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "v2": true,
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png",
     "author": "honue",

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import List, Tuple, Dict, Any
 
 import pytz
+from aiofiles.os import readlink
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.core.config import settings
@@ -29,7 +30,7 @@ class Cd2Upload(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.3"
+    plugin_version = "0.0.4"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -44,6 +45,7 @@ class Cd2Upload(_PluginBase):
     _enable = True
     _cron = '20'
     _onlyonce = False
+    _cleanlink = False
 
     # 链接前缀
     _softlink_prefix_path = '/strm/'
@@ -59,6 +61,7 @@ class Cd2Upload(_PluginBase):
             self._enable = config.get('enable', False)
             self._cron: int = int(config.get('cron', '20'))
             self._onlyonce = config.get('onlyonce', False)
+            self._cleanlink = config.get('cleanlink', False)
             self._cookie = config.get('cookie', '')
             self._softlink_prefix_path = config.get('softlink_prefix_path', '/strm/')
             # 用于修改链接
@@ -84,27 +87,34 @@ class Cd2Upload(_PluginBase):
         self._scheduler = BackgroundScheduler(timezone=settings.TZ)
 
         if self._onlyonce:
-            # 清理无效软链接
-            self._scheduler.add_job(func=self.clean, trigger='date',
-                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-                                    name="清理无效软链接")
             self._scheduler.add_job(func=self.task, trigger='date',
                                     run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=10),
                                     name="cd2转移")
             logger.info(f"cd2转移，立即运行一次")
 
-            self.update_config({
-                'enable': self._enable,
-                'cron': self._cron,
-                'onlyonce': False,
-                'softlink_prefix_path': self._softlink_prefix_path,
-                'cd_mount_prefix_path': self._cd_mount_prefix_path
-            })
+        if self._cleanlink:
+            # 清理无效软链接
+            self._scheduler.add_job(func=self.clean, kwargs={"cleanlink": True}, trigger='date',
+                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
+                                    name="清理无效软链接")
+
+        self._scheduler.add_job(func=self.clean, kwargs={"cleanlink": False}, trigger='interval', minutes=20,
+                                name="清理无效软链接")
 
         if self._scheduler.get_jobs():
             # 启动服务
             self._scheduler.print_jobs()
             self._scheduler.start()
+
+        # 更新配置
+        self.update_config({
+            'enable': self._enable,
+            'cron': self._cron,
+            'onlyonce': False,
+            'cleanlink': False,
+            'softlink_prefix_path': self._softlink_prefix_path,
+            'cd_mount_prefix_path': self._cd_mount_prefix_path
+        })
 
     @eventmanager.register(EventType.TransferComplete)
     def update_waiting_list(self, event: Event):
@@ -133,10 +143,6 @@ class Cd2Upload(_PluginBase):
                                             run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(
                                                 minutes=self._cron),
                                             name="cd2转移")
-                    # 清理无效软链接
-                    self._scheduler.add_job(func=self.clean, trigger='date',
-                                            run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=5),
-                                            name="清理无效软链接")
                 except Exception as err:
                     logger.error(f"定时任务配置错误：{str(err)}")
             else:
@@ -193,17 +199,18 @@ class Cd2Upload(_PluginBase):
             logger.error(e)
             return False
 
-    def clean(self):
+    def clean(self, cleanlink: bool = False):
         with lock:
             waiting_process_list = self.get_data('processed_list') or []
             processed_list = waiting_process_list.copy()
             logger.info(f"已处理列表：{processed_list}")
             for file in waiting_process_list:
+                if cleanlink:
+                    os.remove(os.readlink(file))
                 if os.path.islink(file) and not os.path.exists(file):
                     os.remove(file)
                     logger.info(f"删除本地链接文件 {file}")
                     processed_list.remove(file)
-
                     cd2_dest = file.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)
                     # 当本地链接失效时 strm 写入 clouddrive2 挂载的路径
                     strm_file_path = os.path.splitext(file)[0] + '.strm'
@@ -211,7 +218,7 @@ class Cd2Upload(_PluginBase):
                         strm_file.write(cd2_dest)
                     logger.info(f"{cd2_dest} 写入STRM文件-> {strm_file_path} ")
                 else:
-                    logger.info(f"{file} 未失效 跳过")
+                    logger.debug(f"{file} 未失效 跳过")
             self.save_data('processed_list', processed_list)
 
     def get_state(self) -> bool:
@@ -236,7 +243,7 @@ class Cd2Upload(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -252,7 +259,7 @@ class Cd2Upload(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -267,7 +274,22 @@ class Cd2Upload(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'cleanlink',
+                                            'label': '立即运行一次',
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -326,6 +348,7 @@ class Cd2Upload(_PluginBase):
             'enable': self._enable,
             'cron': self._cron,
             'onlyonce': self._onlyonce,
+            'cleanlink': self._cleanlink,
             'softlink_prefix_path': self._softlink_prefix_path,
             'cd_mount_prefix_path': self._cd_mount_prefix_path
         }
