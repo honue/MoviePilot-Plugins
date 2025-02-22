@@ -281,7 +281,7 @@ class Cd2Upload(_PluginBase):
                                         'component': 'VSwitch',
                                         'props': {
                                             'model': 'cleanlink',
-                                            'label': '立即运行一次',
+                                            'label': '立即清理生成',
                                         }
                                     }
                                 ]
