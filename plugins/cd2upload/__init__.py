@@ -30,7 +30,7 @@ class Cd2Upload(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.6"
+    plugin_version = "0.0.7"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -177,6 +177,8 @@ class Cd2Upload(_PluginBase):
                     logger.error(f'上传失败 {softlink_source} {cd2_dest}')
                     continue
             logger.info("上传完毕，STRM文件将在链接文件失效后生成")
+            self.save_data('waiting_process_list', process_list)
+            self.save_data('processed_list', processed_list)
 
     def _upload_file(self, softlink_source: str = None, cd2_dest: str = None) -> bool:
         logger.info('')
