@@ -12,13 +12,14 @@ from app.core.config import settings
 from app.core.context import MediaInfo
 from app.core.event import eventmanager, Event
 from app.core.meta import MetaBase
+from app.core.metainfo import MetaInfo
 from app.db import get_db
 from app.db.models.transferhistory import TransferHistory
 from app.db.subscribe_oper import SubscribeOper
 from app.log import logger
 from app.plugins import _PluginBase
-from app.schemas import TransferInfo, Notification
-from app.schemas.types import EventType, NotificationType
+from app.schemas import TransferInfo, Notification, WebhookEventInfo
+from app.schemas.types import EventType, MediaType, NotificationType
 
 lock = threading.Lock()
 
@@ -31,7 +32,7 @@ class Cd2Upload(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.8"
+    plugin_version = "0.0.9"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -185,10 +186,15 @@ class Cd2Upload(_PluginBase):
             self.save_data('waiting_process_list', process_list)
             self.save_data('processed_list', processed_list)
             end_time = time.time()
-            if media_info:
+
+            favor: Dict = self.get_data('favor') or {}
+            tmdb_id = str(media_info.tmdb_id)
+
+            if media_info and favor.get(tmdb_id) and media_info.type == MediaType.TV:
                 self.chain.post_message(Notification(
                     mtype=NotificationType.Plugin,
-                    title=media_info.title_year, text=f"{meta.episodes} 上传成功 用时{end_time - start_time}秒",
+                    title=f"{media_info.title_year} {meta.episodes}",
+                    text=f"上传成功 用时{int(end_time - start_time)}秒",
                     image=media_info.get_message_image()))
 
     def _upload_file(self, softlink_source: str = None, cd2_dest: str = None) -> bool:
@@ -255,6 +261,53 @@ class Cd2Upload(_PluginBase):
                     logger.debug(f"{file} 未失效，跳过")
 
             self.save_data('processed_list', processed_list)
+
+    @eventmanager.register(EventType.WebhookMessage)
+    def record_favor(self, event: Event):
+        """
+        记录favor剧集
+        event='item.rate' channel='emby' item_type='TV' item_name='幽游白书' item_id=None item_path='/media/series/日韩剧/幽游白书 (2023)' season_id=None episode_id=None tmdb_id='121659' overview='该剧改编自富坚义博的同名漫画。讲述叛逆少年浦饭幽助（北村匠海 饰）为了救小孩不幸车祸身亡，没想到因此获得重生机会并成为灵界侦探，展开一段不可思议的人生。' percentage=None ip=None device_name=None client=None user_name='honue' image_url=None item_favorite=None save_reason=None item_isvirtual=None media_type='Series'
+        """
+        event_info: WebhookEventInfo = event.event_data
+        # 只处理剧集喜爱
+        if event_info.event != "item.rate" or event_info.item_type != "TV":
+            return
+        if event_info.channel != "emby":
+            logger.info("目前只支持Emby服务端")
+            return
+        title = event_info.item_name
+        tmdb_id = event_info.tmdb_id
+        if title.count(" S"):
+            logger.info("只处理喜爱整季，单集喜爱不处理")
+            return
+        try:
+            meta = MetaInfo(title)
+            mediainfo: MediaInfo = self.chain.recognize_media(meta=meta, tmdbid=tmdb_id, mtype=MediaType.TV)
+            # 存储历史记录
+            favor: Dict = self.get_data('favor') or {}
+            if favor.get(tmdb_id):
+                favor.pop(tmdb_id)
+                logger.info(f"{mediainfo.title_year} 取消更新通知")
+                self.chain.post_message(Notification(
+                    mtype=NotificationType.Plugin,
+                    title=f"{mediainfo.title_year} 取消更新通知", text=None, image=mediainfo.get_message_image()))
+            else:
+                favor[tmdb_id] = {
+                    "title": title,
+                    "type": mediainfo.type.value,
+                    "year": mediainfo.year,
+                    "poster": mediainfo.get_poster_image(),
+                    "overview": mediainfo.overview,
+                    "tmdbid": mediainfo.tmdb_id,
+                    "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+                logger.info(f"{mediainfo.title_year} 加入更新通知")
+                self.chain.post_message(Notification(
+                    mtype=NotificationType.Plugin,
+                    title=f"{mediainfo.title_year} 加入更新通知", text=None, image=mediainfo.get_message_image()))
+            self.save_data('favor', favor)
+        except Exception as e:
+            logger.error(str(e))
 
     def get_state(self) -> bool:
         return self._enable
