@@ -32,7 +32,7 @@ class Cd2Upload(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.9"
+    plugin_version = "0.0.8"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -299,7 +299,7 @@ class Cd2Upload(_PluginBase):
                     "poster": mediainfo.get_poster_image(),
                     "overview": mediainfo.overview,
                     "tmdbid": mediainfo.tmdb_id,
-                    "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 }
                 logger.info(f"{mediainfo.title_year} 加入更新通知")
                 self.chain.post_message(Notification(
