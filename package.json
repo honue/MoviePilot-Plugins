@@ -4,8 +4,8 @@
     "description": "自动获取当季所有番剧，生成strm文件，mp刮削入库，emby直接播放，免去下载，轻松拥有一个番剧媒体库",
     "version": "2.4.3",
     "v2": true,
-    "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/anistrm.png",
-    "author": "honue",
+    "icon": "https://raw.githubusercontent.com/DecaChI/MoviePilot-Plugins/main/icons/anistrm.png",
+    "author": "honue,DecaChI",
     "level": 2
   }
 }

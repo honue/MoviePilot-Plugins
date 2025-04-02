@@ -56,13 +56,13 @@ class ANiStrm(_PluginBase):
     # 插件描述
     plugin_desc = "自动获取当季所有番剧，免去下载，轻松拥有一个番剧媒体库"
     # 插件图标
-    plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/anistrm.png"
+    plugin_icon = "https://raw.githubusercontent.com/DecaChI/MoviePilot-Plugins/main/icons/anistrm.png"
     # 插件版本
     plugin_version = "2.4.3"
     # 插件作者
-    plugin_author = "honue"
+    plugin_author = "DecaChI"
     # 作者主页
-    author_url = "https://github.com/honue"
+    author_url = "https://github.com/DecaChI"
     # 插件配置项ID前缀
     plugin_config_prefix = "anistrm_"
     # 加载顺序
@@ -333,7 +333,7 @@ class ANiStrm(_PluginBase):
                                             'type': 'info',
                                             'variant': 'tonal',
                                             'text': 'emby容器需要设置代理，docker的环境变量必须要有http_proxy代理变量，大小写敏感，具体见readme.' + '\n' +
-                                                    'https://github.com/honue/MoviePilot-Plugins',
+                                                    'https://github.com/DecaChI/MoviePilot-Plugins',
                                             'style': 'white-space: pre-line;'
                                         }
                                     }
