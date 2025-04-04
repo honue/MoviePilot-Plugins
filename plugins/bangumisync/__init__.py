@@ -168,7 +168,7 @@ class BangumiSync(_PluginBase):
                 air_date = ep.get("air_date")
             if ep.get("episode_number") == episode:
                 break
-            if ep.get("episode_type") == "finale":
+            if ep.get("episode_type") in ["finale", "mid_season"]:
                 air_date = None
         air_date = datetime.datetime.strptime(air_date, "%Y-%m-%d").date()
         # 时差原因可能有偏差，且tmdb不计算第0话的首播时间
