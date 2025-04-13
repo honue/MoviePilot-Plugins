@@ -20,7 +20,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.8.2"
+    plugin_version = "1.8.3"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
@@ -40,10 +40,12 @@ class BangumiSync(_PluginBase):
     _token = None
     _tmdb_key = None
     _request = None
+    _uniqueid_match = False
 
     def init_plugin(self, config: dict = None):
         if config:
             self._enable = config.get('enable')
+            self._uniqueid_match = config.get('uniqueid_match')
             self._user = config.get('user') if config.get('user') else None
             self._token = config.get('token') if config.get('token') else None
             self._tmdb_key = settings.TMDB_API_KEY
@@ -93,7 +95,7 @@ class BangumiSync(_PluginBase):
             season_id, episode_id = map(int, [event_info.season_id, event_info.episode_id])
             self._prefix = f"{title} 第{season_id}季 第{episode_id}集"
             # 使用 tmdb airdate 来定位季，提高准确率
-            subject_name, subject_id = self.get_subjectid_by_title(title, season_id, episode_id)
+            subject_name, subject_id = self.get_subjectid_by_title(title, season_id, episode_id, int(event_info.tmdb_id))
             if subject_id is None:
                 return
             logger.info(f"{self._prefix}: {title} => {subject_name} https://bgm.tv/subject/{subject_id}")
@@ -104,17 +106,18 @@ class BangumiSync(_PluginBase):
                 logger.warning(f"{self._prefix}: 同步在看状态失败: {e}")
 
     @cached(TTLCache(maxsize=100, ttl=3600))
-    def get_subjectid_by_title(self, title: str, season: int, episode: int) -> Tuple:
+    def get_subjectid_by_title(self, title: str, season: int, episode: int, unique_id: int) -> Tuple:
         """
         获取 subject id
         :param title: 标题
         :param season: 季号
         :param episode: 集号
+        :param unique_id: 集唯一 id
         """
         logger.debug(f"{self._prefix}: 尝试使用 bgm api 来获取 subject id...")
         tmdb_id, original_name = self.get_tmdb_id(title)
         if tmdb_id is not None:
-            start_date, end_date = self.get_airdate(tmdb_id, season, episode)
+            start_date, end_date = self.get_airdate(tmdb_id, season, episode, unique_id)
             post_json = {
                 "keyword": original_name,
                 "sort": "match",
@@ -152,23 +155,44 @@ class BangumiSync(_PluginBase):
                 return result.get("id"), result.get("original_name")
 
     @cached(TTLCache(maxsize=100, ttl=3600))
-    def get_airdate(self, tmdbid: int, season: int, episode: int):
+    def get_airdate(self, tmdbid: int, season: int, episode: int, unique_id: int):
         """
         通过tmdb 获取 airdate 定位季
         :param tmdbid: tmdb id
         :param season: 季号
         :param episode: 集号
+        :param unique_id: 集唯一 id
         """
+        def get_tv_season_detail(tmdbid, season) -> List[dict]:
+            seasons = [season, 1]
+            for season in seasons:
+                url = f"https://api.tmdb.org/3/tv/{tmdbid}/season/{season}?language=zh-CN&api_key={self._tmdb_key}"
+                resp = requests.get(url, proxies=settings.PROXY).json()
+                if resp and resp.get("success") is False:
+                    continue
+                return resp
+
         logger.debug(f"{self._prefix}: 尝试使用 tmdb api 来获取 airdate...")
-        url = f"https://api.tmdb.org/3/tv/{tmdbid}/season/{season}?language=zh-CN&api_key={self._tmdb_key}"
-        resp = requests.get(url, proxies=settings.PROXY).json()
+        resp = get_tv_season_detail(tmdbid, season)
+        # 处理无效的响应数据
+        if not resp or "episodes" not in resp:
+            logger.warning(f"{self._prefix}: 无法获取TMDB季度信息")
+            return None, None
+        episodes = resp["episodes"]
+        if not episodes:
+            logger.warning(f"{self._prefix}: 该季度没有剧集信息")
+            return None, None
+        # 初始化播出日期
         air_date = resp.get("air_date")
-        for ep in resp.get("episodes"):
+        for ep in episodes:
             if air_date is None:
                 air_date = ep.get("air_date")
-            if ep.get("episode_number") == episode:
+            if self._uniqueid_match and unique_id:
+                if ep.get("id") == unique_id:
+                    break
+            elif ep.get("episode_number") == episode:
                 break
-            if ep.get("episode_type") in ["finale", "mid_season"]:
+            if ep.get("episode_type") == "finale":
                 air_date = None
         air_date = datetime.datetime.strptime(air_date, "%Y-%m-%d").date()
         # 时差原因可能有偏差，且tmdb不计算第0话的首播时间
@@ -326,6 +350,22 @@ class BangumiSync(_PluginBase):
                                         }
                                     }
                                 ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 4
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'uniqueid_match',
+                                            'label': '集唯一ID匹配',
+                                        }
+                                    }
+                                ]
                             }
                         ]
                     },
@@ -395,6 +435,7 @@ class BangumiSync(_PluginBase):
             }
         ], {
             "enable": False,
+            "uniqueid_match": False,
             "user": "",
             "token": ""
         }
@@ -408,6 +449,7 @@ class BangumiSync(_PluginBase):
         """
         self.update_config({
             "enable": self._enable,
+            "uniqueid_match": self._uniqueid_match,
             "user": self._user,
             "token": self._token
         })
