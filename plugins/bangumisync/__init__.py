@@ -192,7 +192,7 @@ class BangumiSync(_PluginBase):
                     break
             elif ep.get("episode_number") == episode:
                 break
-            if ep.get("episode_type") == "finale":
+            if ep.get("episode_type") in ["finale", "mid_season"]:
                 air_date = None
         air_date = datetime.datetime.strptime(air_date, "%Y-%m-%d").date()
         # 时差原因可能有偏差，且tmdb不计算第0话的首播时间
@@ -218,14 +218,14 @@ class BangumiSync(_PluginBase):
 
         found = False
         for info in ep_info:
-            if info["sort"] == episode and info["name"]:
+            if info["sort"] == episode:
                 episode_id = info["id"]
                 found = True
                 break
         
         if not found:
             for info in ep_info:
-                if info["ep"] == episode and info["name"]:
+                if info["ep"] == episode:
                     episode_id = info["id"]
                     found = True
                     break
