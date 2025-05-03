@@ -99,6 +99,7 @@
     "author": "honue,happyTonakai",
     "level": 2,
     "history": {
+      "v1.8.5": "支持Plex",
       "v1.8.4": "修复当`tmdb_id`为空时同步失败的问题",
       "v1.8.3": "新增`unique_id`匹配模式, 适配剧集组条目匹配",
       "v1.8.2": "尝试解决因tmdb合并季无法匹配条目的问题",
