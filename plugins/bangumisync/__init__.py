@@ -20,7 +20,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.8.4"
+    plugin_version = "1.8.5"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
@@ -75,8 +75,7 @@ class BangumiSync(_PluginBase):
             if not (event_info.event in play_start or event_info.percentage and event_info.percentage > 90):
                 return
             # 根据路径判断是不是番剧
-            path = event_info.item_path
-            if not BangumiSync.is_anime(path):
+            if not BangumiSync.is_anime(event_info):
                 return
 
             if event_info.item_type in ["TV"]:
@@ -103,7 +102,7 @@ class BangumiSync(_PluginBase):
                 logger.info(f"{self._prefix}: {title} => {subject_name} https://bgm.tv/subject/{subject_id}")
 
                 self.sync_watching_status(subject_id, episode_id)
-                
+
         except Exception as e:
             logger.warning(f"同步在看状态失败: {e}")
 
@@ -211,10 +210,10 @@ class BangumiSync(_PluginBase):
             logger.debug(f"{self._prefix}: 获取到 bgm_uid {self._bgm_uid}")
         else:
             logger.debug(f"{self._prefix}: 使用 bgm_uid {self._bgm_uid}")
-        
+
         # 更新合集状态
         self.update_collection_status(subject_id)
-        
+
         # 获取episode id
         ep_info = self.get_episodes_info(subject_id)
 
@@ -224,16 +223,16 @@ class BangumiSync(_PluginBase):
                 episode_id = info["id"]
                 found = True
                 break
-        
+
         if not found:
             for info in ep_info:
                 if info["ep"] == episode:
                     episode_id = info["id"]
                     found = True
                     break
-        
+
         last_episode = info == ep_info[-1]
-        
+
         if not found:
             logger.warning(f"{self._prefix}: 未找到episode，可能因为TMDB和BGM的episode映射关系不一致")
             return
@@ -301,11 +300,16 @@ class BangumiSync(_PluginBase):
             logger.warning(f"{self._prefix}: 单集点格子失败, code={resp.status_code}")
 
     @staticmethod
-    def is_anime(path):
+    def is_anime(event_info: WebhookEventInfo) -> bool:
         """
         通过路径关键词来确定是不是anime媒体库
         """
         path_keyword = "日番,cartoon,动漫,动画,ani,anime,新番,番剧,特摄,bangumi,ova,映画,国漫,日漫"
+        if event_info.channel in ["emby", "jellyfin"]:
+            path = event_info.get("item_path", "")
+        elif event_info.channel == "plex":
+            path = event_info.json_object.get("Metadata", {}).get("librarySectionTitle", "")
+
         path = path.lower()  # Convert path to lowercase to make the check case-insensitive
         for keyword in path_keyword.split(','):
             if path.count(keyword):
