@@ -20,7 +20,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.8.3"
+    plugin_version = "1.8.4"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
@@ -64,49 +64,51 @@ class BangumiSync(_PluginBase):
         # 插件未启用
         if not self._enable:
             return
-        logger.debug(f"收到webhook事件: {event.event_data}")
-        event_info: WebhookEventInfo = event.event_data
-        # 不是指定用户, 不处理
-        if event_info.user_name not in self._user.split(','):
-            return
-        play_start = {"playback.start", "media.play", "PlaybackStart"}
-        # 不是播放停止事件, 或观看进度不足90% 不处理
-        if not (event_info.event in play_start or event_info.percentage and event_info.percentage > 90):
-            return
-        # 根据路径判断是不是番剧
-        path = event_info.item_path
-        if not BangumiSync.is_anime(path):
-            return
-
-        if event_info.item_type in ["TV"]:
-            """
-                event='playback.pause' channel='emby' item_type='TV' item_name='咒术回战 S1E47 关门' item_id='22646' item_path='/media/cartoon/动漫/咒术回战 (2020)/Season 1/咒术回战 - S01E47 - 第 47 集.mkv' season_id=1 episode_id=47 tmdb_id=None overview='渋谷事変の最終局面に呪術師が集うなかで、脹相は夏油の亡骸に寄生する“黒幕”の正体に気付く。そして、絶体絶命の危機に現れた特級術師・九十九由基。九十九と“黒幕”がそれぞれ語る人類の未来（ネクストステージ...' percentage=2.5705228512861966 ip='127.0.0.1' device_name='Chrome Windows' client='Emby Web' user_name='honue' image_url=None item_favorite=None save_reason=None item_isvirtual=None media_type='Episode'
-            """
-            # 标题，mp 的 tmdb 搜索 api 有点问题，带空格的搜不出来，直接使用 emby 事件的标题
-            tmdb_id = event_info.tmdb_id
-            logger.info(f"匹配播放事件 {event_info.item_name} tmdb id = {tmdb_id}...")
-            match = re.match(r"^(.+)\sS\d+E\d+\s.+", event_info.item_name)
-            if match:
-                title = match.group(1)
-            else:
-                title = event_info.item_name.split(' ')[0]
-
-            # 季 集
-            season_id, episode_id = map(int, [event_info.season_id, event_info.episode_id])
-            self._prefix = f"{title} 第{season_id}季 第{episode_id}集"
-            # 使用 tmdb airdate 来定位季，提高准确率
-            subject_name, subject_id = self.get_subjectid_by_title(title, season_id, episode_id, int(event_info.tmdb_id))
-            if subject_id is None:
+        try:
+            logger.debug(f"收到webhook事件: {event.event_data}")
+            event_info: WebhookEventInfo = event.event_data
+            # 不是指定用户, 不处理
+            if event_info.user_name not in self._user.split(','):
                 return
-            logger.info(f"{self._prefix}: {title} => {subject_name} https://bgm.tv/subject/{subject_id}")
+            play_start = {"playback.start", "media.play", "PlaybackStart"}
+            # 不是播放停止事件, 或观看进度不足90% 不处理
+            if not (event_info.event in play_start or event_info.percentage and event_info.percentage > 90):
+                return
+            # 根据路径判断是不是番剧
+            path = event_info.item_path
+            if not BangumiSync.is_anime(path):
+                return
 
-            try:
+            if event_info.item_type in ["TV"]:
+                """
+                    event='playback.pause' channel='emby' item_type='TV' item_name='咒术回战 S1E47 关门' item_id='22646' item_path='/media/cartoon/动漫/咒术回战 (2020)/Season 1/咒术回战 - S01E47 - 第 47 集.mkv' season_id=1 episode_id=47 tmdb_id=None overview='渋谷事変の最終局面に呪術師が集うなかで、脹相は夏油の亡骸に寄生する“黒幕”の正体に気付く。そして、絶体絶命の危機に現れた特級術師・九十九由基。九十九と“黒幕”がそれぞれ語る人類の未来（ネクストステージ...' percentage=2.5705228512861966 ip='127.0.0.1' device_name='Chrome Windows' client='Emby Web' user_name='honue' image_url=None item_favorite=None save_reason=None item_isvirtual=None media_type='Episode'
+                """
+                # 标题，mp 的 tmdb 搜索 api 有点问题，带空格的搜不出来，直接使用 emby 事件的标题
+                tmdb_id = event_info.tmdb_id
+                logger.info(f"匹配播放事件 {event_info.item_name} tmdb id = {tmdb_id}...")
+                match = re.match(r"^(.+)\sS\d+E\d+\s.+", event_info.item_name)
+                if match:
+                    title = match.group(1)
+                else:
+                    title = event_info.item_name.split(' ')[0]
+
+                # 季 集
+                season_id, episode_id = map(int, [event_info.season_id, event_info.episode_id])
+                self._prefix = f"{title} 第{season_id}季 第{episode_id}集"
+                unique_id = int(tmdb_id) if tmdb_id else None
+                # 使用 tmdb airdate 来定位季，提高准确率
+                subject_name, subject_id = self.get_subjectid_by_title(title, season_id, episode_id, unique_id)
+                if subject_id is None:
+                    return
+                logger.info(f"{self._prefix}: {title} => {subject_name} https://bgm.tv/subject/{subject_id}")
+
                 self.sync_watching_status(subject_id, episode_id)
-            except Exception as e:
-                logger.warning(f"{self._prefix}: 同步在看状态失败: {e}")
+                
+        except Exception as e:
+            logger.warning(f"同步在看状态失败: {e}")
 
     @cached(TTLCache(maxsize=100, ttl=3600))
-    def get_subjectid_by_title(self, title: str, season: int, episode: int, unique_id: int) -> Tuple:
+    def get_subjectid_by_title(self, title: str, season: int, episode: int, unique_id: int | None) -> Tuple:
         """
         获取 subject id
         :param title: 标题
@@ -155,7 +157,7 @@ class BangumiSync(_PluginBase):
                 return result.get("id"), result.get("original_name")
 
     @cached(TTLCache(maxsize=100, ttl=3600))
-    def get_airdate(self, tmdbid: int, season: int, episode: int, unique_id: int):
+    def get_airdate(self, tmdbid: int, season: int, episode: int, unique_id: int | None):
         """
         通过tmdb 获取 airdate 定位季
         :param tmdbid: tmdb id
