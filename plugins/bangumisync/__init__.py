@@ -306,7 +306,7 @@ class BangumiSync(_PluginBase):
         """
         path_keyword = "日番,cartoon,动漫,动画,ani,anime,新番,番剧,特摄,bangumi,ova,映画,国漫,日漫"
         if event_info.channel in ["emby", "jellyfin"]:
-            path = event_info.get("item_path", "")
+            path = event_info.item_path
         elif event_info.channel == "plex":
             path = event_info.json_object.get("Metadata", {}).get("librarySectionTitle", "")
 
