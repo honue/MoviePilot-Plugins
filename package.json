@@ -93,7 +93,7 @@
   "BangumiSync": {
     "name": "Bangumi打格子",
     "description": "将你在媒体库上的番剧观看，同步到Bangumi在看状态",
-    "version": "1.8.4",
+    "version": "1.8.5",
     "v2": true,
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg",
     "author": "honue,happyTonakai",
