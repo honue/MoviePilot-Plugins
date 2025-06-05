@@ -1,7 +1,10 @@
 from typing import List, Tuple, Dict, Any
+from urllib.parse import unquote
+import json
 
 from cachetools import cached, TTLCache
 
+from app.api.endpoints.media import seasons
 from app.chain.download import DownloadChain
 from app.chain.media import MediaChain
 from app.chain.search import SearchChain
@@ -16,15 +19,15 @@ from app.schemas import MediaType
 
 class ShortCut(_PluginBase):
     # 插件名称
-    plugin_name = "快捷指令"
+    plugin_name = "修改版快捷指令"
     # 插件描述
     plugin_desc = "IOS快捷指令，快速选片添加订阅"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/shortcut.jpg"
     # 插件版本
-    plugin_version = "1.5"
+    plugin_version = "1.6"
     # 插件作者
-    plugin_author = "honue"
+    plugin_author = "honue, Sinterdial"
     # 作者主页
     author_url = "https://github.com/honue"
     # 插件配置项ID前缀
@@ -74,9 +77,9 @@ class ShortCut(_PluginBase):
         logger.info(f"{title} 没有找到结果")
         return []
 
-    def subscribe(self, title: str, tmdbid: str, type: str = "电视剧", plugin_key: str = "") -> Any:
+    def get_seasons_list(self, title: str, tmdbid: str, type: str = "电视剧", plugin_key: str = "") -> Any:
         """
-        添加订阅订阅
+        查询季数
         """
         if self._plugin_key != plugin_key:
             msg = f"plugin_key错误：{plugin_key}"
@@ -92,29 +95,144 @@ class ShortCut(_PluginBase):
             logger.warn(msg)
             return msg
 
+        # 创建季列表
+        seasons_list = list(range(1, mediainfo.number_of_seasons + 1))
+        seasons_info = [self.number_to_chinese(season) for season in seasons_list]
+        seasons_list_str = [f"第{season_info}季" for season_info in seasons_info]
+        exits_season_num = 0
+
         # 查询缺失的媒体信息
-        exist_flag, _ = self.downloadchain.get_no_exists_info(meta=meta, mediainfo=mediainfo)
-        if exist_flag:
-            msg = f'{mediainfo.title_year} 媒体库中已存在'
-            logger.info(msg)
-            return msg
-        # 判断用户是否已经添加订阅
-        if self.subscribechain.exists(mediainfo=mediainfo, meta=meta):
-            msg = f'{mediainfo.title_year} 订阅已存在'
-            logger.info(msg)
-            return msg
-        # 添加订阅
-        sid, msg = self.subscribechain.add(title=mediainfo.title,
-                                           year=mediainfo.year,
-                                           mtype=mediainfo.type,
-                                           tmdbid=mediainfo.tmdb_id,
-                                           season=meta.begin_season,
-                                           exist_ok=True,
-                                           username="快捷指令")
-        if not msg:
-            return f"{mediainfo.title_year} 订阅成功"
+        for index, season in enumerate(seasons_list):
+            # 标记订阅季数
+            meta.begin_season = season
+            mediainfo.season = season
+
+            exist_flag, _ = self.downloadchain.get_no_exists_info(meta=meta, mediainfo=mediainfo)
+            if exist_flag:
+                msg = f'媒体库中已存在 {mediainfo.title_year} {seasons_list_str[index]} '
+                logger.info(msg)
+                seasons_list_str[index] += "（已入库，请勿重复选择）"
+                exits_season_num += 1
+            # 判断用户是否已经添加订阅
+            if self.subscribechain.exists(mediainfo=mediainfo, meta=meta):
+                msg = f'{mediainfo.title_year} 订阅已存在'
+                logger.info(msg)
+                seasons_list_str[index] += "（已订阅，请勿重复选择）"
+                exits_season_num += 1
+
+        if exits_season_num == len(seasons_list):
+            return f'已入库/订阅剧集 {mediainfo.title_year} 的所有季，请勿重复订阅'
+        elif seasons_list_str:
+            return seasons_list_str
         else:
+            return "未识别到季数相关信息"
+
+    def subscribe(self, title: str, tmdbid: str, type: str = "电视剧", seasons_str_encoded: str = "第一季", plugin_key: str = "") -> Any:
+        """
+        添加订阅
+        """
+        if self._plugin_key != plugin_key:
+            msg = f"plugin_key错误：{plugin_key}"
+            logger.error(msg)
             return msg
+        # 元数据
+        meta = MetaInfo(title=title)
+
+        log_msg = f"接收到的参数seasons：{seasons_str_encoded},接收到的参数type：{type}"
+        logger.info(log_msg)
+
+        # # 解码url参数
+        # seasons_str = []
+        # if seasons_str_encoded != "第一季":
+        #     seasons_str_decoded = unquote(seasons_str_encoded)
+        #     seasons_str = json.loads(seasons_str_decoded)  # 转换回列表
+        #     log_msg = f"解码后的参数：{seasons_str_decoded}, 转换后的列表：{seasons_str}"
+        #     logger.info(log_msg)
+        # else:
+        #     seasons_str = [1]
+
+        # 分解要订阅的季数
+        seasons_str = seasons_str_encoded.split(",")
+
+        meta.tmdbid = tmdbid
+        mediainfo: MediaInfo = self.chain.recognize_media(meta=meta, tmdbid=tmdbid,
+                                                          mtype=MediaType(type))
+        if not mediainfo:
+            msg = f'未识别到媒体信息，标题：{title}，tmdb_id：{tmdbid}'
+            logger.warn(msg)
+            return msg
+
+        # 判断是否为剧集
+        if type == "电视剧":
+            # 转化季信息到阿拉伯数字
+            seasons_to_subscribe = [self.chinese_to_number(season_info) for season_info in seasons_str]
+            # 记录已订阅季数
+            seasons_subscribed = []
+
+            if len(seasons_to_subscribe) == 1:
+                # 标记订阅季数
+                meta.begin_season = seasons_to_subscribe[0]
+                mediainfo.season = seasons_to_subscribe[0]
+
+                exist_flag, _ = self.downloadchain.get_no_exists_info(meta=meta, mediainfo=mediainfo)
+                if exist_flag:
+                    msg = f'媒体库中已存在 {mediainfo.title_year} {seasons_to_subscribe[0]}'
+                    logger.info(msg)
+                    return msg
+                # 查询订阅是否存在
+                if self.subscribechain.exists(mediainfo=mediainfo, meta=meta):
+                    msg = f'{mediainfo.title_year} {seasons_to_subscribe[0]} 订阅已存在'
+                    logger.info(msg)
+                    return msg
+
+            # 依次订阅剧集
+            for season_to_subscribe in seasons_to_subscribe:
+                # 标记订阅季数
+                mediainfo.season = season_to_subscribe
+
+                # 添加订阅
+                sid, msg = self.subscribechain.add(title=mediainfo.title,
+                                                   year=mediainfo.year,
+                                                   mtype=mediainfo.type,
+                                                   tmdbid=mediainfo.tmdb_id,
+                                                   season=season_to_subscribe,
+                                                   exist_ok=True,
+                                                   username="快捷指令")
+
+                if not msg:
+                    seasons_subscribed.append(self.number_to_chinese(season_to_subscribe))
+                else:
+                    return msg
+
+            # 拼接成功订阅的信息并返回
+            subscribed_info = mediainfo.title_year  + " 第" + "、".join(seasons_subscribed) + "季订阅成功！"
+            return subscribed_info
+        # 如果是电影，则不考虑季相关问题
+        else:
+            # 查询缺失的媒体信息
+            exist_flag, _ = self.downloadchain.get_no_exists_info(meta=meta, mediainfo=mediainfo)
+            if exist_flag:
+                msg = f'媒体库中已存在 {mediainfo.title_year}'
+                logger.info(msg)
+                return msg
+            # 查询订阅是否存在
+            if self.subscribechain.exists(mediainfo=mediainfo, meta=meta):
+                msg = f'{mediainfo.title_year} 订阅已存在'
+                logger.info(msg)
+                return msg
+            # 添加订阅
+            sid, msg = self.subscribechain.add(title=mediainfo.title,
+                                               year=mediainfo.year,
+                                               mtype=mediainfo.type,
+                                               tmdbid=mediainfo.tmdb_id,
+                                               exist_ok=True,
+                                               username="快捷指令")
+            if not msg:
+                return f"{mediainfo.title_year} 订阅成功"
+            else:
+                return msg
+
+
 
     @cached(TTLCache(maxsize=100, ttl=300))
     def torrents(self, tmdbid: int, type: str = None, area: str = "title",
@@ -190,6 +308,12 @@ class ShortCut(_PluginBase):
                 "summary": "模糊搜索",
                 "description": "模糊搜索",
             }, {
+                "path": "/getseasonslist",
+                "endpoint": self.get_seasons_list,
+                "methods": ["GET"],
+                "summary": "查询剧集季信息",
+                "description": "查询剧集季信息",
+            },{
                 "path": "/subscribe",
                 "endpoint": self.subscribe,
                 "methods": ["GET"],
@@ -209,6 +333,123 @@ class ShortCut(_PluginBase):
                 "description": "下载任务",
             }
         ]
+
+    @staticmethod
+    def chinese_to_number(chinese_num: str) -> int:
+        """
+        将中文大写数字（如 第二十三季）转换为阿拉伯数字
+        """
+        char_to_digit = {
+            '零': 0,
+            '一': 1,
+            '二': 2,
+            '两': 2,
+            '三': 3,
+            '四': 4,
+            '五': 5,
+            '六': 6,
+            '七': 7,
+            '八': 8,
+            '九': 9,
+            '十': 10,
+            '百': 100,
+            '千': 1000,
+            '万': 10000,
+            '亿': 100000000
+        }
+
+        # 去除“第X季”的格式
+        if chinese_num.startswith("第") and chinese_num.endswith("季"):
+            chinese_num = chinese_num[1:-1]
+
+        current_value = 0
+        prev_value = 0
+
+        i = 0
+        while i < len(chinese_num):
+            char = chinese_num[i]
+            value = char_to_digit.get(char, None)
+
+            if value is None:
+                raise ValueError(f"不支持的字符：{char}")
+
+            if value in [10, 100, 1000]:  # 处理“十百千”
+                if prev_value == 0:
+                    prev_value = 1  # 如“十五”中“十”前无数字，默认为1
+                current_value += prev_value * value
+                prev_value = 0
+            else:
+                prev_value = value
+            i += 1
+
+        current_value += prev_value  # 加上最后的个位数
+        return current_value
+
+    @staticmethod
+    def number_to_chinese(num: int) -> str:
+        """
+        将阿拉伯数字转换为中文大写数字表示
+
+        支持将整数转换为对应的中文字符表达，包括零、一到九的基础数字，
+        以及十、百、千、万、亿等单位组合。适用于需要将数字以中文形式展示的场景。
+
+        参数:
+            num (int): 需要转换的整数
+
+        返回:
+            str: 转换后的中文大写数字字符串
+
+        示例:
+            输入: 1234
+            输出: "一千二百三十四"
+        """
+        if num == 0:
+            return "零"
+
+        # 定义基础数字和单位
+        digits = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"]
+        units = ["", "十", "百", "千"]  # 十进制单位
+        large_units = ["", "万", "亿", "万亿"]  # 大单位
+
+        def chunk(number: int) -> str:
+            """
+            将小于10000的数字分解并转换为中文表示
+
+            参数:
+                number (int): 小于10000的整数
+
+            返回:
+                str: 中文表示的字符串片段
+            """
+            res = ""
+            count = 0
+            while number > 0:
+                digit = number % 10
+                if digit != 0:
+                    res = digits[digit] + units[count] + res
+                else:
+                    # 处理连续的零，避免出现多个“零”
+                    if res and res[0] != '零':
+                        res = '零' + res
+                number //= 10
+                count += 1
+            return res
+
+        result = ""
+        chunk_index = 0
+        while num > 0:
+            part = num % 10000
+            if part != 0:
+                # 对每个不超过10000的部分进行处理，并加上对应的大单位
+                result = chunk(part) + large_units[chunk_index] + result
+            num //= 10000
+            chunk_index += 1
+
+        # 特殊情况处理，如"一十"应简化为"十"
+        if result.startswith("一十"):
+            result = result[1:]
+
+        return result
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
@@ -285,7 +526,7 @@ class ShortCut(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '感谢Nest的想法。更新于 2024/4/25 安装完插件需要重启MoviePilot（1.8.3+） 推荐使用只有订阅功能的快捷指令，按需选择。'
+                                            'text': '感谢Nest的想法和honue的原始代码。更新于 2025/6/5 安装完插件需要重启MoviePilot（1.8.3+） 只有订阅功能的快捷指令，暂无下载快捷指令。'
                                         }
                                     }
                                 ]
@@ -300,7 +541,7 @@ class ShortCut(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '包含订阅和下载，快捷指令：https://www.icloud.com/shortcuts/467c61e122814fb3b910701c0ce276cc'
+                                            'text': '包含订阅和下载，快捷指令：https://www.icloud.com/shortcuts/d6df3b5f4ab24e75a73d99eed899d208'
                                         }
                                     }
                                 ]
@@ -315,7 +556,7 @@ class ShortCut(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '只有订阅功能，快捷指令：https://www.icloud.com/shortcuts/359d70d2fe554388a2efcdd9929a033b'
+                                            'text': '只有订阅功能，暂无下载快捷指令'
                                         }
                                     }
                                 ]
