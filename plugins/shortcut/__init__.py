@@ -1,6 +1,4 @@
 from typing import List, Tuple, Dict, Any
-from urllib.parse import unquote
-import json
 
 from cachetools import cached, TTLCache
 
@@ -19,7 +17,7 @@ from app.schemas import MediaType
 
 class ShortCut(_PluginBase):
     # 插件名称
-    plugin_name = "修改版快捷指令"
+    plugin_name = "快捷指令"
     # 插件描述
     plugin_desc = "IOS快捷指令，快速选片添加订阅"
     # 插件图标
