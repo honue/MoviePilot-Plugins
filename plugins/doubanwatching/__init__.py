@@ -146,7 +146,7 @@ class DouBanWatching(_PluginBase):
         # 尝试同步之前同步失败的
         if sync_ret:
             logger.info(f"尝试同步之前同步失败的条目")
-            for key,value in self._watching_status.items():
+            for key,value in self._wait_process.items():
                 logger.info(f"尝试同步: {key}")
                 self._sync_to_douban(key, value["status"], value["type"], processed_items, value["poster_path"])
 
