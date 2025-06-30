@@ -23,7 +23,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.9.5"
+    plugin_version = "1.9.6"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -46,6 +46,8 @@ class DouBanWatching(_PluginBase):
     _pc_num = None
     _mobile_month = None
     _mobile_num = None
+
+    _wait_process:Dict = None
 
     def init_plugin(self, config: dict = None):
         config = config or {}
@@ -72,6 +74,7 @@ class DouBanWatching(_PluginBase):
         play_start = {"playback.start", "media.play", "PlaybackStart"}
         path = event_info.item_path
         processed_items: Dict = self.get_data('data') or {}
+        self._wait_process: Dict = self.get_data('wait') or {}
 
         if (event_info.event in play_start and event_info.user_name in self._user.split(',')) or played:
             logger.info(" ")
@@ -139,7 +142,13 @@ class DouBanWatching(_PluginBase):
             logger.info(f"{title} 已同步到豆瓣在看，不处理")
             return
 
-        self._sync_to_douban(title, status, event_info, processed_items, mediainfo)
+        sync_ret = self._sync_to_douban(title, status, event_info.item_type, processed_items, mediainfo.poster_path)
+        # 尝试同步之前同步失败的
+        if sync_ret:
+            logger.info(f"尝试同步之前同步失败的条目")
+            for key,value in self._watching_status.items():
+                logger.info(f"尝试同步: {key}")
+                self._sync_to_douban(key, value["status"], value["type"], processed_items, value["poster_path"])
 
     def _process_movie(self, event_info: WebhookEventInfo, processed_items: Dict, played: bool = False):
         title = event_info.item_name
@@ -163,13 +172,13 @@ class DouBanWatching(_PluginBase):
             logger.info(f"{title} 已同步到豆瓣在看，不处理")
             return
 
-        self._sync_to_douban(title, "collect", event_info, processed_items, mediainfo)
+        self._sync_to_douban(title, "collect", event_info.item_type, processed_items, mediainfo.poster_path)
 
     def _recognize_media(self, meta: MetaInfo, tmdb_id: Optional[int]) -> Optional[MediaInfo]:
         return MediaChain().recognize_media(meta=meta, mtype=meta.type, tmdbid=tmdb_id, cache=True)
 
-    def _sync_to_douban(self, title: str, status: str, event_info: WebhookEventInfo, processed_items: Dict,
-                        mediainfo: MediaInfo):
+    def _sync_to_douban(self, title: str, status: str, mediaType: str, processed_items: Dict,
+                        poster_path:str) -> bool:
         logger.info(f"开始尝试获取 {title} 豆瓣id")
         douban_helper = DoubanHelper(user_cookie=self._cookie)
         subject_name, subject_id = douban_helper.get_subject_id(title=title)
@@ -182,15 +191,32 @@ class DouBanWatching(_PluginBase):
                     "subject_id": subject_id,
                     "subject_name": subject_name,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "poster_path": mediainfo.poster_path,
-                    "type": "电视剧" if event_info.item_type == "TV" else "电影"
+                    "poster_path": poster_path,
+                    "type": "电视剧" if mediaType == "TV" else "电影"
                 }
+
+                if title in self._wait_process:
+                    del self._wait_process[title]
+
                 self.save_data('data', processed_items)
                 logger.info(f"{title} 同步到档案成功")
+                return True
             else:
-                logger.info(f"{title} 同步到档案失败")
+                logger.error(f"{title} 同步到档案失败")
+                if title not in self._wait_process:
+                    self._wait_process[title] = {
+                        "subject_id": subject_id,
+                        "subject_name": subject_name,
+                        "status": status,
+                        "poster_path": poster_path,
+                        "type": mediaType
+                    }
+                    self.save_data('wait', self._wait_process)
+                    logger.error(f"{title} 添加到待同步列表")
         else:
             logger.warn(f"获取 {title} subject_id 失败，本条目不存在于豆瓣，或请检查cookie")
+
+        return False
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """
