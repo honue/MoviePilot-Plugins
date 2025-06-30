@@ -47,7 +47,7 @@ class DouBanWatching(_PluginBase):
     _mobile_month = None
     _mobile_num = None
 
-    _wait_process:Dict = None
+    _wait_process: Dict = None
 
     def init_plugin(self, config: dict = None):
         config = config or {}
@@ -146,7 +146,8 @@ class DouBanWatching(_PluginBase):
         # 尝试同步之前同步失败的
         if sync_ret:
             logger.info(f"尝试同步之前同步失败的条目")
-            for key,value in self._wait_process.items():
+            self._wait_process: Dict = self.get_data('wait') or {}
+            for key, value in self._wait_process.items():
                 logger.info(f"尝试同步: {key}")
                 self._sync_to_douban(key, value["status"], value["type"], processed_items, value["poster_path"])
 
@@ -178,7 +179,7 @@ class DouBanWatching(_PluginBase):
         return MediaChain().recognize_media(meta=meta, mtype=meta.type, tmdbid=tmdb_id, cache=True)
 
     def _sync_to_douban(self, title: str, status: str, mediaType: str, processed_items: Dict,
-                        poster_path:str) -> bool:
+                        poster_path: str) -> bool:
         logger.info(f"开始尝试获取 {title} 豆瓣id")
         douban_helper = DoubanHelper(user_cookie=self._cookie)
         subject_name, subject_id = douban_helper.get_subject_id(title=title)
@@ -199,6 +200,7 @@ class DouBanWatching(_PluginBase):
                     del self._wait_process[title]
 
                 self.save_data('data', processed_items)
+                self.save_data('wait', self._wait_process)
                 logger.info(f"{title} 同步到档案成功")
                 return True
             else:
