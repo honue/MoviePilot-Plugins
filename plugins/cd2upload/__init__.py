@@ -32,7 +32,7 @@ class Cd2Upload(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.8"
+    plugin_version = "0.0.9"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -42,7 +42,7 @@ class Cd2Upload(_PluginBase):
     # 加载顺序
     plugin_order = 1
     # 可使用的用户级别
-    auth_level = 3
+    auth_level = 1
 
     _enable = True
     _cron = '20'
