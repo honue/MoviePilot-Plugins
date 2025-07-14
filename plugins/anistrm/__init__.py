@@ -163,7 +163,7 @@ class ANiStrm(_PluginBase):
 
     def __touch_strm_file(self, file_name, file_url: str = None) -> bool:
         if not file_url:
-            src_url = f'https://openani.an-i.workers.dev/{self._date}/{file_name}?d=true'
+            src_url = f'https://openani.an-i.workers.dev/{self._date}/{file_name}.mp4?d=true'
         else:
             src_url = file_url
         file_path = f'{self._storageplace}/{file_name}.strm'
