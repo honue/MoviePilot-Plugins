@@ -163,9 +163,18 @@ class ANiStrm(_PluginBase):
 
     def __touch_strm_file(self, file_name, file_url: str = None) -> bool:
         if not file_url:
-            src_url = f'https://openani.an-i.workers.dev/{self._date}/{file_name}?d=true'
+            # 季度API生成的URL，使用新格式
+            encoded_filename = quote(file_name, safe='')
+            src_url = f'https://openani.an-i.workers.dev/{self._date}/{encoded_filename}.mp4?d=true'
         else:
-            src_url = file_url
+            # 检查API获取的URL格式是否符合要求
+            if self._is_url_format_valid(file_url):
+                # 格式符合要求，直接使用
+                src_url = file_url
+            else:
+                # 格式不符合要求，进行转换
+                src_url = self._convert_url_format(file_url)
+        
         file_path = f'{self._storageplace}/{file_name}.strm'
         if os.path.exists(file_path):
             logger.debug(f'{file_name}.strm 文件已存在')
@@ -178,6 +187,22 @@ class ANiStrm(_PluginBase):
         except Exception as e:
             logger.error('创建strm源文件失败：' + str(e))
             return False
+
+    def _is_url_format_valid(self, url: str) -> bool:
+        """检查URL格式是否符合要求（.mp4?d=true）"""
+        return url.endswith('.mp4?d=true')
+
+    def _convert_url_format(self, url: str) -> str:
+        """将URL转换为符合要求的格式"""
+        if '?d=mp4' in url:
+            # 将 ?d=mp4 替换为 .mp4?d=true
+            return url.replace('?d=mp4', '.mp4?d=true')
+        elif url.endswith('.mp4'):
+            # 如果已经以.mp4结尾，添加?d=true
+            return f'{url}?d=true'
+        else:
+            # 其他情况，添加.mp4?d=true
+            return f'{url}.mp4?d=true'
 
     def __task(self, fulladd: bool = False):
         cnt = 0
