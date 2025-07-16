@@ -6,11 +6,12 @@ from app.chain.media import MediaChain
 from app.core.event import eventmanager, Event
 from app.core.metainfo import MetaInfo
 from app.plugins import _PluginBase
-from app.plugins.doubanwatching.DoubanHelper import DoubanHelper
+from .DoubanHelper import DoubanHelper
 from app.schemas import WebhookEventInfo, MediaInfo
 from app.schemas.types import EventType, MediaType
 import re
 from app.log import logger
+from app.schemas import Notification, NotificationType, MessageChannel
 
 lock = threading.Lock()
 
@@ -23,7 +24,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.9.6"
+    plugin_version = "2.0"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -61,7 +62,8 @@ class DouBanWatching(_PluginBase):
         self._pc_month = int(config.get("pc_month")) if config.get("pc_month", None) else 3
         self._pc_num = int(config.get("pc_num", 50)) if config.get("pc_num", None) else 50
         self._mobile_month = int(config.get("mobile_month")) if config.get("mobile_month", None) else 2
-        self._mobile_num = int(config.get("mobile_num")) if config.get("mobile_num", None) else 15
+        self._mobile_num = int(config.get("mobile_num", None)) if config.get("mobile_num", None) else 15
+        self._notify = config.get("notify", False)
 
         if self.get_data("processed"):
             from app.db.plugindata_oper import PluginDataOper
@@ -178,6 +180,18 @@ class DouBanWatching(_PluginBase):
     def _recognize_media(self, meta: MetaInfo, tmdb_id: Optional[int]) -> Optional[MediaInfo]:
         return MediaChain().recognize_media(meta=meta, mtype=meta.type, tmdbid=tmdb_id, cache=True)
 
+    def _send_notification(self, success: bool, message: str):
+        if not self._notify:
+            return
+        title = f"豆瓣观影同步档案 {'成功' if success else '失败'}"
+        text_content = message.strip()
+        text_content += f"\n时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        try:
+            self.post_message(mtype=NotificationType.MediaServer, title=title, text=text_content)
+            logger.info(f"{self.plugin_name} 发送通知: {title}")
+        except Exception as e:
+            logger.error(f"{self.plugin_name} 发送通知失败: {e}")
+
     def _sync_to_douban(self, title: str, status: str, mediaType: str, processed_items: Dict,
                         poster_path: str) -> bool:
         logger.info(f"开始尝试获取 {title} 豆瓣id")
@@ -202,6 +216,8 @@ class DouBanWatching(_PluginBase):
                 self.save_data('data', processed_items)
                 self.save_data('wait', self._wait_process)
                 logger.info(f"{title} 同步到档案成功")
+                # 通知：同步成功
+                self._send_notification(True, f"《{title}》已成功同步到豆瓣档案。")
                 return True
             else:
                 logger.error(f"{title} 同步到档案失败")
@@ -215,9 +231,12 @@ class DouBanWatching(_PluginBase):
                     }
                     self.save_data('wait', self._wait_process)
                     logger.error(f"{title} 添加到待同步列表")
+                # 通知：同步失败
+                self._send_notification(False, f"《{title}》同步到豆瓣档案失败，请检查cookie或网络。")
         else:
             logger.warn(f"获取 {title} subject_id 失败，本条目不存在于豆瓣，或请检查cookie")
-
+            # 只要 subject_id 为 None，无条件推送 cookie 失效通知
+            self._send_notification(False, "豆瓣cookie可能已失效，请及时更换！")
         return False
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
@@ -235,7 +254,7 @@ class DouBanWatching(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -250,7 +269,7 @@ class DouBanWatching(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -265,7 +284,7 @@ class DouBanWatching(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -273,6 +292,21 @@ class DouBanWatching(_PluginBase):
                                         'props': {
                                             'model': 'first',
                                             'label': '不标记第一集',
+                                        }
+                                    }
+                                ]
+                            }, {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'notify',
+                                            'label': '发送通知',
                                         }
                                     }
                                 ]
@@ -475,6 +509,7 @@ class DouBanWatching(_PluginBase):
             "pc_num": 50,
             "mobile_month": 2,
             "mobile_num": 15,
+            "notify": False,
         }
 
     def get_dashboard(self, **kwargs) -> Optional[Tuple[Dict[str, Any], Dict[str, Any], List[dict]]]:

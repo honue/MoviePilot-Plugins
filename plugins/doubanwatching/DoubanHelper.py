@@ -152,4 +152,4 @@ class DoubanHelper:
 if __name__ == "__main__":
     doubanHelper = DoubanHelper()
     subject_title, subject_id = doubanHelper.get_subject_id("太阳的后裔")
-    # doubanHelper.set_watching_status(subject_id=subject_id, status="do", private=True)
+    # doubanHelper.set_watching_status(subject_id=subject_id, status="do", private=True) 
