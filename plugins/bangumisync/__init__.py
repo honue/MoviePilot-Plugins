@@ -1,16 +1,16 @@
+import datetime
+import re
 from typing import Tuple, List, Dict, Any
-from app.core.event import eventmanager, Event
+
+import requests
+
+from app.core.cache import cached
 from app.core.config import settings
-from app.core.metainfo import MetaInfo
+from app.core.event import eventmanager, Event
 from app.log import logger
 from app.plugins import _PluginBase
-from app.schemas import WebhookEventInfo, MediaInfo
-from app.schemas.types import EventType, MediaType
-from app.utils.http import RequestUtils
-from cachetools import cached, TTLCache
-import requests
-import re
-import datetime
+from app.schemas import WebhookEventInfo
+from app.schemas.types import EventType
 
 class BangumiSync(_PluginBase):
     # 插件名称
@@ -98,7 +98,7 @@ class BangumiSync(_PluginBase):
                     unique_id = int(tmdb_id)
                 except Exception:
                     unique_id = None
-                
+
                 # 使用 tmdb airdate 来定位季，提高准确率
                 subject_id, subject_name, original_episode_name = self.get_subjectid_by_title(
                     title, season_id, episode_id, unique_id
@@ -112,7 +112,7 @@ class BangumiSync(_PluginBase):
         except Exception as e:
             logger.warning(f"同步在看状态失败: {e}")
 
-    @cached(TTLCache(maxsize=100, ttl=3600))
+    @cached(maxsize=100, ttl=3600)
     def get_subjectid_by_title(self, title: str, season: int, episode: int, unique_id: int | None) -> Tuple:
         """
         获取 subject id
@@ -155,7 +155,7 @@ class BangumiSync(_PluginBase):
         subject_id = data["id"]
         return subject_id, name_cn, original_episode_name
 
-    @cached(TTLCache(maxsize=100, ttl=3600))
+    @cached(maxsize=100, ttl=3600)
     def get_tmdb_id(self, title: str):
         logger.debug(f"{self._prefix}: 尝试使用 tmdb api 来获取 subject id...")
         url = f"https://api.tmdb.org/3/search/tv?query={title}&api_key={self._tmdb_key}"
@@ -169,7 +169,7 @@ class BangumiSync(_PluginBase):
             if 16 in result.get("genre_ids"):
                 return result.get("id"), result.get("original_name"), result.get("original_language")
 
-    @cached(TTLCache(maxsize=100, ttl=3600))
+    @cached(maxsize=100, ttl=3600)
     def get_airdate_and_ep_name(self, tmdbid: int, season_id: int, episode: int, unique_id: int | None, original_language: str):
         """
         通过tmdb 获取 airdate 定位季
@@ -245,7 +245,7 @@ class BangumiSync(_PluginBase):
         end_date = air_date + datetime.timedelta(days=15)
         return start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"), original_episode_name
 
-    @cached(TTLCache(maxsize=10, ttl=600))
+    @cached(maxsize=10, ttl=600)
     def sync_watching_status(self, subject_id, episode, original_episode_name):
         # 获取uid
         if not self._bgm_uid:
@@ -296,7 +296,7 @@ class BangumiSync(_PluginBase):
         if last_episode:
             self.update_collection_status(subject_id, 2)
 
-    @cached(TTLCache(maxsize=100, ttl=3600))
+    @cached(maxsize=100, ttl=3600)
     def update_collection_status(self, subject_id, new_type=3):
         resp = self._request.get(url=f"https://api.bgm.tv/v0/users/{self._bgm_uid}/collections/{subject_id}")
         resp = resp.json()
@@ -323,17 +323,47 @@ class BangumiSync(_PluginBase):
             logger.warning(resp.text)
             logger.warning(f"{self._prefix}: 合集状态 {type_dict[old_type]} => {type_dict[new_type]}，在看状态更新失败")
 
-    @cached(TTLCache(maxsize=100, ttl=3600))
+    @cached(maxsize=100, ttl=3600)
     def get_episodes_info(self, subject_id):
-        resp = self._request.get("https://api.bgm.tv/v0/episodes", params={"subject_id": subject_id})
-        if resp.status_code == 200:
-            logger.debug(f"{self._prefix}: 获取 episode info 成功")
-        else:
-            logger.warning(f"{self._prefix}: 获取 episode info 失败, code={resp.status_code}")
-        ep_info = resp.json()["data"]
-        return ep_info
+        all_episodes = []
+        offset = 0
+        # 使用最大 limit 减少请求次数
+        limit = 1000
 
-    @cached(TTLCache(maxsize=100, ttl=3600))
+        while True:
+            params = {
+                "subject_id": subject_id,
+                "limit": limit,
+                "offset": offset
+            }
+            resp = self._request.get("https://api.bgm.tv/v0/episodes", params=params)
+
+            if resp.status_code != 200:
+                logger.warning(f"{self._prefix}: 获取 episode info 失败, code={resp.status_code} text={resp.text}")
+                break
+
+            data = resp.json()
+            episodes = data["data"]
+
+            if not episodes:
+                break
+
+            all_episodes.extend(episodes)
+
+            # 检查是否还有更多数据
+            if len(episodes) < limit:
+                break
+
+            offset += limit
+
+        if all_episodes:
+            logger.debug(f"{self._prefix}: 获取 episode info 成功，共 {len(all_episodes)} 集")
+        else:
+            logger.warning(f"{self._prefix}: 未获取到任何 episode info")
+
+        return all_episodes
+
+    @cached(maxsize=100, ttl=3600)
     def update_episode_status(self, episode_id):
         url = f"https://api.bgm.tv/v0/users/-/collections/-/episodes/{episode_id}"
         resp = self._request.get(url)
