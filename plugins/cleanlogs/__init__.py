@@ -25,7 +25,7 @@ class CleanLogs(_PluginBase):
     # 插件图标
     plugin_icon = "clean.png"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -99,8 +99,20 @@ class CleanLogs(_PluginBase):
                 logger.debug(f"{plugin_id} 日志文件不存在")
                 continue
 
-            with open(log_path, 'r', encoding='utf-8') as file:
-                lines = file.readlines()
+            encodings_to_try = ['utf-8', 'gbk', 'gb2312']
+            lines = []
+
+            for encoding in encodings_to_try:
+                try:
+                    with open(log_path, 'r', encoding=encoding) as file:
+                        lines = file.readlines()
+                    break
+                except UnicodeDecodeError:
+                    continue
+
+            if not lines:
+                with open(log_path, 'r', encoding='utf-8', errors='ignore') as file:
+                    lines = file.readlines()
 
             if self._rows == 0:
                 top_lines = []
@@ -259,32 +271,34 @@ class CleanLogs(_PluginBase):
         """
         获取本地插件
         """
-        # 已安装插件
-        install_plugins = SystemConfigOper().get(SystemConfigKey.UserInstalledPlugins) or []
-
         local_plugins = {}
-        # 线上插件列表
-        markets = settings.PLUGIN_MARKET.split(",")
-        for market in markets:
-            online_plugins = PluginHelper().get_plugins(market) or {}
-            for pid, plugin in online_plugins.items():
-                if pid in install_plugins:
-                    local_plugin = local_plugins.get(pid)
-                    if local_plugin:
-                        if StringUtils.compare_version(local_plugin.get("plugin_version"), plugin.get("version")) < 0:
-                            local_plugins[pid] = {
-                                "id": pid,
-                                "plugin_name": plugin.get("name"),
-                                "repo_url": market,
-                                "plugin_version": plugin.get("version")
-                            }
-                    else:
-                        local_plugins[pid] = {
-                            "id": pid,
-                            "plugin_name": plugin.get("name"),
-                            "repo_url": market,
-                            "plugin_version": plugin.get("version")
-                        }
+
+        # 本地安装插件
+        install_plugins = PluginManager().get_local_plugins()
+        # 本地所有插件ID
+        install_plugin_ids = SystemConfigOper().get(SystemConfigKey.UserInstalledPlugins) or []
+
+        for plugin_id in install_plugin_ids:
+            # 标记是否找到匹配的插件
+            found = False
+            # 遍历所有本地安装的插件
+            for plugin in install_plugins:
+                if plugin.id == plugin_id:
+                    found = True
+
+                    local_plugins[plugin_id] = {
+                        "id": plugin_id,
+                        "plugin_name": plugin.plugin_name,
+                        "plugin_version": plugin.plugin_version
+                    }
+                    break
+            # 如果没有找到匹配的插件
+            if not found:
+                local_plugins[plugin_id] = {
+                    "id": plugin_id,
+                    "plugin_name": "残留插件",
+                    "plugin_version": "",
+                }
 
         return local_plugins
 
