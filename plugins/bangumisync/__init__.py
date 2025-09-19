@@ -300,7 +300,7 @@ class BangumiSync(_PluginBase):
     def update_collection_status(self, subject_id, new_type=3):
         resp = self._request.get(url=f"https://api.bgm.tv/v0/users/{self._bgm_uid}/collections/{subject_id}")
         resp = resp.json()
-        type_dict = {0:"未看", 2:"看过", 3:"在看"}
+        type_dict = {0:"未看", 1:"想看", 2:"看过", 3:"在看", 4:"搁置", 5:"抛弃"}
         old_type = 0 if "type" not in resp else resp["type"]
         if old_type == 2:
             # 已经看过，避免刷屏
