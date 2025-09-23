@@ -20,7 +20,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.9.0"
+    plugin_version = "1.9.1"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
@@ -250,7 +250,7 @@ class BangumiSync(_PluginBase):
         # 获取uid
         if not self._bgm_uid:
             resp = self._request.get(url="https://api.bgm.tv/v0/me")
-            self._bgm_uid = resp.json().get("id")
+            self._bgm_uid = resp.json().get("username")
             logger.debug(f"{self._prefix}: 获取到 bgm_uid {self._bgm_uid}")
         else:
             logger.debug(f"{self._prefix}: 使用 bgm_uid {self._bgm_uid}")
