@@ -20,7 +20,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.9.0"
+    plugin_version = "1.9.1"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
@@ -250,7 +250,7 @@ class BangumiSync(_PluginBase):
         # 获取uid
         if not self._bgm_uid:
             resp = self._request.get(url="https://api.bgm.tv/v0/me")
-            self._bgm_uid = resp.json().get("id")
+            self._bgm_uid = resp.json().get("username")
             logger.debug(f"{self._prefix}: 获取到 bgm_uid {self._bgm_uid}")
         else:
             logger.debug(f"{self._prefix}: 使用 bgm_uid {self._bgm_uid}")
@@ -300,7 +300,7 @@ class BangumiSync(_PluginBase):
     def update_collection_status(self, subject_id, new_type=3):
         resp = self._request.get(url=f"https://api.bgm.tv/v0/users/{self._bgm_uid}/collections/{subject_id}")
         resp = resp.json()
-        type_dict = {0:"未看", 2:"看过", 3:"在看"}
+        type_dict = {0:"未看", 1:"想看", 2:"看过", 3:"在看", 4:"搁置", 5:"抛弃"}
         old_type = 0 if "type" not in resp else resp["type"]
         if old_type == 2:
             # 已经看过，避免刷屏
