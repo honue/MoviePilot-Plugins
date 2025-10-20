@@ -20,7 +20,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.9.1"
+    plugin_version = "1.9.2"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
@@ -262,32 +262,61 @@ class BangumiSync(_PluginBase):
         ep_info = self.get_episodes_info(subject_id)
 
         found_episode_id = None
-        last_episode = False
         if ep_info:
-            for info in ep_info:
-                # First try to match by original episode name
-                if info.get("name") == original_episode_name:
-                    found_episode_id = info["id"]
-                    break
+            # 收集所有匹配项
+            candidates = []
 
             for info in ep_info:
-                # Second try to match episode number
-                if info.get("sort") == episode:
-                    found_episode_id = info["id"]
-                    break
+                score = 0
+                matched_fields = {}
+                # name
+                name = info.get("name")
+                # sort
+                sort = info.get("sort")
+                # ep
+                ep = info.get("ep")
 
-            if found_episode_id is None:
-                # Fallback to checking the 'ep' field if 'sort' didn't match
-                for info in ep_info:
-                    if info.get("ep") == episode:
-                        found_episode_id = info["id"]
-                        break
+                # 名称匹配
+                if (original_episode_name and
+                    name == original_episode_name):
+                    score += 4
+                    matched_fields["name"] = name
+
+                # sort字段匹配
+                if sort == episode:
+                    score += 3
+                    matched_fields["sort"] = sort
+
+                # ep字段匹配
+                if ep == episode:
+                    score += 2
+                    matched_fields["ep"] = ep
+
+                # 只有得分大于0的才考虑
+                if score > 0:
+                    candidates.append({
+                        "info": info,
+                        "score": score,
+                        "matched_fields": matched_fields
+                    })
+
+            if candidates:
+                # 按得分排序，得分高的在前
+                candidates.sort(key=lambda x: x["score"], reverse=True)
+                # 选择得分最高的
+                best_candidate = candidates[0]
+                found_episode_id = best_candidate["info"]["id"]
+                matched_info = best_candidate["info"]
+
+                # 记录匹配详情
+                logger.info(f"{self._prefix}: 匹配完成 - 得分: {best_candidate['score']}, "
+                            f"匹配字段: {best_candidate['matched_fields']}")
 
         if not found_episode_id:
             logger.warning(f"{self._prefix}: 未找到episode，可能因为TMDB和BGM的episode映射关系不一致")
             return
 
-        last_episode = info == ep_info[-1]
+        last_episode = matched_info == ep_info[-1]
 
         # 点格子
         self.update_episode_status(found_episode_id)
@@ -324,7 +353,7 @@ class BangumiSync(_PluginBase):
             logger.warning(f"{self._prefix}: 合集状态 {type_dict[old_type]} => {type_dict[new_type]}，在看状态更新失败")
 
     @cached(maxsize=100, ttl=3600)
-    def get_episodes_info(self, subject_id):
+    def get_episodes_info(self, subject_id) -> List[dict]:
         all_episodes = []
         offset = 0
         # 使用最大 limit 减少请求次数
