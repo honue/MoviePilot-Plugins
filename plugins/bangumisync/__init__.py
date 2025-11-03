@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, Optional, Tuple, List, Dict, Any
@@ -10,11 +11,14 @@ from app.core.config import settings
 from app.core.event import eventmanager, Event
 from app.core.meta.metabase import MetaBase
 from app.core.metainfo import MetaInfoPath
+from app.core.module import ModuleManager
 from app.db.models.mediaserver import MediaServerItem
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas import WebhookEventInfo
-from app.schemas.types import EventType, MediaType
+from app.schemas.exception import ImmediateException
+from app.schemas.types import EventType, MediaType, NotificationType
+from app.utils.common import retry
 from app.utils.http import RequestUtils
 
 
@@ -59,6 +63,7 @@ class BangumiAPIClient:
     def __cached_invoke(self, method, *args, **kwargs):
         return self.req_method[method](*args, **kwargs)
 
+    @retry(ExceptionToCheck=ConnectionError, logger=logger)
     def __invoke(self, method, url, key: str=None, call_cached=True, data=None, json: dict=None, **kwargs):
         req_url = self._base_url + url
         params = {}
@@ -70,22 +75,21 @@ class BangumiAPIClient:
             resp = self.req_method[method](url=req_url, params=params, data=data, json=json)
         # 检查响应
         if resp is None:
-            logger.warning(f"Bangumi API 请求失败: {method}: {req_url}")
-            return None
+            raise ConnectionError
         # 处理204状态码（无内容）
         elif resp.status_code == 204:
             return True
-        try:
-            result = resp.json()
-            if resp.status_code in (400, 401, 404):
-                logger.warning(f"{resp.status_code}: {result.get('title')}, {result.get('description')}")
-                return None
-            else:
-                # 如果指定了key，则提取对应字段
-                return result.get(key) if key else result
-        except Exception as e:
-            logger.error(f"JSON解析失败 [{resp.status_code}]: {req_url}, 错误: {str(e)}")
-            return None
+
+        result = resp.json()
+        err_msg = f"{resp.status_code}: {result.get('title')}, {result.get('description')}"
+        if resp.status_code in (400, 401):
+            logger.warning(err_msg)
+            raise ImmediateException(err_msg)
+        elif resp.status_code == 404:
+            logger.warning(err_msg)
+        else:
+            # 如果指定了key，则提取对应字段
+            return result.get(key) if key else result
 
     def username(self):
         """
@@ -192,13 +196,15 @@ class BangumiSync(_PluginBase):
 
     _enable: bool = False
     _user: str = ""
-    _uniqueid_match = False
+    _uniqueid_match: bool = False
+    _notify: bool = False
 
     def init_plugin(self, config: dict = None):
         if config:
             self._enable = config.get('enable', False)
             self._user = config.get('user', "")
             self._uniqueid_match = config.get('uniqueid_match', False)
+            self._notify = config.get('notify', False)
             _token = config.get('token')
         if self._enable and _token:
             self.bangumi_client = BangumiAPIClient(token=_token, ua=BangumiSync.UA)
@@ -226,6 +232,7 @@ class BangumiSync(_PluginBase):
 
             title = None
             air_date = None
+            language = "ja"
             epinfo = None
             logger.info(f"匹配播放事件 {event_info.item_name} ...")
             # 解析事件元数据
@@ -235,11 +242,19 @@ class BangumiSync(_PluginBase):
             if mediainfo:
                 title = mediainfo.original_title
                 air_date = mediainfo.release_date
+                language = mediainfo.original_language
             else:
                 title = meta.name
 
             if mediainfo.type == MediaType.TV:
-                air_date, epinfo = self.__lookup_episode(meta=meta, unique_id=event_info.tmdb_id)
+                with self.temporary_attributes(
+                    ModuleManager().get_running_module("TheMovieDbModule"),
+                    **{
+                        "tmdb.season_obj.language": language,
+                        "tmdb.tv.language": language,
+                    },
+                ):
+                    air_date, epinfo = self.__lookup_episode(meta=meta, unique_id=event_info.tmdb_id)
             # 匹配Bangumi 条目
             subject_id = self.get_subjectid(title=title, air_date=air_date, type=meta.type)
 
@@ -249,7 +264,13 @@ class BangumiSync(_PluginBase):
             else:
                 self.sync_tv_status(subject_id, meta.begin_episode, epinfo)
         except Exception as e:
-            logger.warning(f"同步在看状态失败: {e}")
+            if self._notify:
+                self.post_message(
+                    mtype=NotificationType.Manual,
+                    title=f"{self._prefix} 同步失败",
+                    text=str(e),
+                    image=mediainfo.get_message_image(),
+                )
 
     def parse_event_meta(self, event_info: WebhookEventInfo) -> MetaBase:
         meta = MetaInfoPath(Path(event_info.item_path))
@@ -422,6 +443,8 @@ class BangumiSync(_PluginBase):
             # 收集所有匹配项
             candidates = []
 
+            episode_name = tmdb_epinfo.get("name")
+
             episode_airdate = tmdb_epinfo.get("air_date")
 
             if episode_airdate:
@@ -433,12 +456,20 @@ class BangumiSync(_PluginBase):
             for info in ep_info:
                 score = 0
                 matched_fields = {}
+                # name
+                name = info.get("name", "")
                 # airdate
                 airdate = info.get("airdate")
                 # sort
                 sort = info.get("sort")
                 # ep
                 ep = info.get("ep")
+
+                # 名称匹配
+                if (episode_name and
+                    name == episode_name):
+                    score += 4
+                    matched_fields["name"] = name
 
                 # 播出日期匹配
                 if (episode_airdate and
@@ -547,6 +578,56 @@ class BangumiSync(_PluginBase):
         else:
             logger.warning(f"{self._prefix}: 单集点格子失败")
 
+    @contextmanager
+    def temporary_attributes(self, obj, **kwargs):
+        """
+        临时修改对象属性的上下文管理器
+        :param obj: 要修改的对象
+        :param kwargs: 嵌套属性字典，如 {"tmdb.language": "zh-CN"}
+        """
+        # 保存原始值
+        old_values = {}
+
+        try:
+            # 设置新值并保存原始值
+            for attr_path, new_value in kwargs.items():
+                attrs = attr_path.split('.')
+                current_obj = obj
+
+                # 导航到目标对象
+                for i, attr in enumerate(attrs[:-1]):
+                    if not hasattr(current_obj, attr):
+                        # 如果中间属性不存在，创建一个空对象
+                        setattr(current_obj, attr, type('DynamicObj', (), {})())
+                    current_obj = getattr(current_obj, attr)
+
+                # 保存原始值
+                final_attr = attrs[-1]
+                old_values[attr_path] = getattr(current_obj, final_attr, None)
+
+                # 设置新值
+                setattr(current_obj, final_attr, new_value)
+
+            yield
+
+        finally:
+            # 恢复原始值
+            for attr_path, old_value in old_values.items():
+                attrs = attr_path.split('.')
+                current_obj = obj
+
+                # 导航到目标对象
+                for attr in attrs[:-1]:
+                    current_obj = getattr(current_obj, attr)
+
+                final_attr = attrs[-1]
+                if old_value is not None:
+                    setattr(current_obj, final_attr, old_value)
+                else:
+                    # 如果原来没有这个属性，就删除它
+                    if hasattr(current_obj, final_attr):
+                        delattr(current_obj, final_attr)
+
     @staticmethod
     def is_anime(event_info: WebhookEventInfo) -> bool:
         """
@@ -621,6 +702,22 @@ class BangumiSync(_PluginBase):
                                         }
                                     }
                                 ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 4
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'notify',
+                                            'label': '出现异常时发送通知',
+                                        }
+                                    }
+                                ]
                             }
                         ]
                     },
@@ -691,6 +788,7 @@ class BangumiSync(_PluginBase):
         ], {
             "enable": False,
             "uniqueid_match": False,
+            "notify": False,
             "user": "",
             "token": ""
         }
