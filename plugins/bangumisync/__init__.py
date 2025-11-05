@@ -1,3 +1,5 @@
+import contextvars
+import re
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -20,6 +22,10 @@ from app.schemas.exception import ImmediateException
 from app.schemas.types import EventType, MediaType, NotificationType
 from app.utils.common import retry
 from app.utils.http import RequestUtils
+
+
+# 为每个上下文维护独立的状态
+_temp_attrs_state = contextvars.ContextVar('temp_attrs_state', default={})
 
 
 class BangumiAPIClient:
@@ -49,6 +55,7 @@ class BangumiAPIClient:
                 "User-Agent": ua or settings.USER_AGENT,
                 "content-type": "application/json",
             },
+            proxies=settings.PROXY,
             session=Session(),
         )
         self.req_method: dict[str, Callable[..., Optional[Response]]] = {
@@ -75,7 +82,7 @@ class BangumiAPIClient:
             resp = self.req_method[method](url=req_url, params=params, data=data, json=json)
         # 检查响应
         if resp is None:
-            raise ConnectionError
+            raise ConnectionError(f"{method}: {req_url}, 返回值为空")
         # 处理204状态码（无内容）
         elif resp.status_code == 204:
             return True
@@ -180,7 +187,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "1.9.2"
+    plugin_version = "2.0.0"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
@@ -193,6 +200,11 @@ class BangumiSync(_PluginBase):
     auth_level = 1
 
     UA = "honue/MoviePilot-Plugins (https://github.com/honue/MoviePilot-Plugins)"
+
+    ANIME_KEYWORDS_PATTERN = re.compile(
+        r"(日番|cartoon|动漫|动画|ani|anime|新番|番剧|特摄|bangumi|ova|映画|国漫|日漫)",
+        re.IGNORECASE,
+    )
 
     _enable: bool = False
     _user: str = ""
@@ -224,7 +236,7 @@ class BangumiSync(_PluginBase):
             play_start = {"playback.start", "media.play", "PlaybackStart"}
             # 不是播放停止事件, 或观看进度不足90% 不处理
             if not (event_info.event in play_start or event_info.percentage and event_info.percentage > 90):
-                logger.info(f"播放进度不足90%, 不处理")
+                logger.info(f"{event_info.item_name} 播放进度不足90%, 不处理")
                 return
             # 根据路径判断是不是番剧
             if not BangumiSync.is_anime(event_info):
@@ -263,12 +275,14 @@ class BangumiSync(_PluginBase):
                 self.update_collection_status(subject_id, 2)
             else:
                 self.sync_tv_status(subject_id, meta.begin_episode, epinfo)
-        except Exception as e:
+        except ImmediateException as e:
+            err_msg = f"{self._prefix} 同步失败:\n {str(e)}"
+            logger.error(err_msg)
             if self._notify:
                 self.post_message(
                     mtype=NotificationType.Manual,
-                    title=f"{self._prefix} 同步失败",
-                    text=str(e),
+                    title=self.plugin_name,
+                    text=err_msg,
                     image=mediainfo.get_message_image(),
                 )
 
@@ -349,11 +363,11 @@ class BangumiSync(_PluginBase):
                     group_id = sub.episode_group
                     break
             if not group_id:
-                groups = tmdbapi.tv.episode_groups(tmdbid) or {}
+                groups = tmdbapi.tv.episode_groups(tmdbid) or []
 
                 # 有些番剧拥有多个Seasons结果，比如我独自升级，其中一个Seasons是将总集篇作为一集，因此我们选择episode_count最小的一个
                 seasons = [
-                    result for result in groups.get("results") if result.get("name") == "Seasons"
+                    result for result in groups if result.get("name") == "Seasons"
                 ]
                 if seasons:
                     season_group = min(seasons, key=lambda x: x.get("episode_count"))
@@ -416,19 +430,17 @@ class BangumiSync(_PluginBase):
         """
         logger.info(f"{self._prefix}: 正在搜索 Bangumi 对应条目...")
 
-        resp = self.bangumi_client.search(title=title, air_date=air_date)
-        if not resp:
-            return
+        if resp := self.bangumi_client.search(title=title, air_date=air_date):
+            logger.debug(f"{self._prefix}: 搜索结果: {resp}")
 
-        logger.debug(f"{self._prefix}: 搜索结果: {resp}")
+            for subject in resp:
+                mtype = MediaType.MOVIE if subject.get("platform") in {"剧场版", "电影"} else MediaType.TV
+                if mtype == type:
+                    subject_id = subject["id"]
+                    logger.info(f"{subject.get('name_cn', '')} https://bgm.tv/subject/{subject_id}")
+                    return subject_id
 
-        for subject in resp:
-            mtype = MediaType.MOVIE if subject.get("platform") in {"剧场版", "电影"} else MediaType.TV
-            if mtype == type:
-                return subject["id"]
-
-        logger.warning(f"{self._prefix}: 未找到对应的 Bangumi 条目")
-        return None
+        raise ImmediateException(f"{self._prefix}: 未找到对应的 Bangumi 条目")
 
     def sync_tv_status(self, subject_id, episode, tmdb_epinfo: dict):
 
@@ -443,9 +455,9 @@ class BangumiSync(_PluginBase):
             # 收集所有匹配项
             candidates = []
 
-            episode_name = tmdb_epinfo.get("name")
+            episode_name = tmdb_epinfo.get("name") if tmdb_epinfo else None
 
-            episode_airdate = tmdb_epinfo.get("air_date")
+            episode_airdate = tmdb_epinfo.get("air_date") if tmdb_epinfo else None
 
             if episode_airdate:
                 _air_date = datetime.strptime(episode_airdate, "%Y-%m-%d").date()
@@ -509,8 +521,7 @@ class BangumiSync(_PluginBase):
                             f"匹配字段: {best_candidate['matched_fields']}")
 
         if not found_episode_id:
-            logger.warning(f"{self._prefix}: 未找到episode，可能因为TMDB和BGM的episode映射关系不一致")
-            return
+            raise ImmediateException(f"{self._prefix}: 未找到episode，可能因为TMDB和BGM的episode映射关系不一致")
 
         last_episode = matched_info == ep_info[-1]
 
@@ -538,7 +549,7 @@ class BangumiSync(_PluginBase):
         if resp:
             logger.info(f"{self._prefix}: 合集状态 {type_dict[old_type]} => {type_dict[new_type]}，在看状态更新成功")
         else:
-            logger.warning(f"{self._prefix}: 合集状态 {type_dict[old_type]} => {type_dict[new_type]}，在看状态更新失败")
+            raise ImmediateException(f"{self._prefix}: 合集状态 {type_dict[old_type]} => {type_dict[new_type]}，在看状态更新失败")
 
     def get_episodes_info(self, subject_id) -> List[dict]:
         all_episodes = []
@@ -560,10 +571,10 @@ class BangumiSync(_PluginBase):
 
             offset += limit
 
-        if all_episodes:
-            logger.debug(f"{self._prefix}: 获取 episode info 成功，共 {len(all_episodes)} 集")
-        else:
-            logger.warning(f"{self._prefix}: 未获取到任何 episode info")
+        if not all_episodes:
+            raise ImmediateException(f"{self._prefix}: 未获取到任何 episode info")
+
+        logger.debug(f"{self._prefix}: 获取 episode info 成功，共 {len(all_episodes)} 集")
 
         return all_episodes
 
@@ -576,7 +587,7 @@ class BangumiSync(_PluginBase):
         if resp:
             logger.info(f"{self._prefix}: 单集点格子成功")
         else:
-            logger.warning(f"{self._prefix}: 单集点格子失败")
+            raise ImmediateException(f"{self._prefix}: 单集点格子失败")
 
     @contextmanager
     def temporary_attributes(self, obj, **kwargs):
@@ -585,64 +596,81 @@ class BangumiSync(_PluginBase):
         :param obj: 要修改的对象
         :param kwargs: 嵌套属性字典，如 {"tmdb.language": "zh-CN"}
         """
-        # 保存原始值
-        old_values = {}
+        obj_name = obj.__class__.__name__
+        # 获取当前上下文状态
+        state = _temp_attrs_state.get().copy()
+        obj_id = id(obj)
+
+        if obj_id not in state:
+            state[obj_id] = {}
+
+        modifications = {}
 
         try:
-            # 设置新值并保存原始值
+            # 应用修改
             for attr_path, new_value in kwargs.items():
                 attrs = attr_path.split('.')
                 current_obj = obj
 
                 # 导航到目标对象
-                for i, attr in enumerate(attrs[:-1]):
+                for attr in attrs[:-1]:
                     if not hasattr(current_obj, attr):
-                        # 如果中间属性不存在，创建一个空对象
                         setattr(current_obj, attr, type('DynamicObj', (), {})())
                     current_obj = getattr(current_obj, attr)
 
                 # 保存原始值
                 final_attr = attrs[-1]
-                old_values[attr_path] = getattr(current_obj, final_attr, None)
+                old_value = getattr(current_obj, final_attr, None)
+
+                modifications[attr_path] = {
+                    'target_obj': current_obj,
+                    'attr_name': final_attr,
+                    'old_value': old_value
+                }
 
                 # 设置新值
                 setattr(current_obj, final_attr, new_value)
+                logger.debug(f"Set: {obj_name}.{attr_path} = {new_value}")
+
+            # 更新上下文状态
+            state[obj_id].update(modifications)
+            token = _temp_attrs_state.set(state)
 
             yield
 
         finally:
             # 恢复原始值
-            for attr_path, old_value in old_values.items():
-                attrs = attr_path.split('.')
-                current_obj = obj
+            try:
+                for attr_path, modification in modifications.items():
+                    target_obj = modification['target_obj']
+                    attr_name = modification['attr_name']
+                    old_value = modification['old_value']
 
-                # 导航到目标对象
-                for attr in attrs[:-1]:
-                    current_obj = getattr(current_obj, attr)
-
-                final_attr = attrs[-1]
-                if old_value is not None:
-                    setattr(current_obj, final_attr, old_value)
-                else:
-                    # 如果原来没有这个属性，就删除它
-                    if hasattr(current_obj, final_attr):
-                        delattr(current_obj, final_attr)
+                    if old_value is not None:
+                        setattr(target_obj, attr_name, old_value)
+                        logger.debug(f"Restore: {obj_name}.{attr_path} = {old_value}")
+                    elif hasattr(target_obj, attr_name):
+                        delattr(target_obj, attr_name)
+                        logger.debug(f"Remove: {obj_name}.{attr_path}")
+            finally:
+                # 恢复上下文
+                _temp_attrs_state.reset(token)
 
     @staticmethod
     def is_anime(event_info: WebhookEventInfo) -> bool:
         """
         通过路径关键词来确定是不是anime媒体库
         """
-        path_keyword = "日番,cartoon,动漫,动画,ani,anime,新番,番剧,特摄,bangumi,ova,映画,国漫,日漫"
         if event_info.channel in ["emby", "jellyfin"]:
             path = event_info.item_path
         elif event_info.channel == "plex":
             path = event_info.json_object.get("Metadata", {}).get("librarySectionTitle", "")
+        else:
+            return False
 
-        path = path.lower()  # Convert path to lowercase to make the check case-insensitive
-        for keyword in path_keyword.split(','):
-            if path.count(keyword):
-                return True
+        if BangumiSync.ANIME_KEYWORDS_PATTERN.search(path):
+            return True
+
         logger.debug(f"{path} 不是动漫媒体库")
         return False
 
@@ -740,7 +768,8 @@ class BangumiSync(_PluginBase):
                                         }
                                     }
                                 ]
-                            }, {
+                            },
+                            {
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
@@ -758,7 +787,8 @@ class BangumiSync(_PluginBase):
                                 ]
                             }
                         ]
-                    }, {
+                    },
+                    {
                         'component': 'VRow',
                         'content': [
                             {
@@ -772,12 +802,21 @@ class BangumiSync(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': 'access-token获取：https://next.bgm.tv/demo/access-token' + '\n' +
-                                                    'emby添加你mp的webhook（event要包括播放）： http://127.0.0.1:3001/api/v1/webhook?token=moviepilot' + '\n' +
+                                            'text': True
+                                        },
+                                        'content': [
+                                            {
+                                                'component': 'div',
+                                                'style': 'white-space: pre-line;',
+                                                'props': {
+                                                    'innerHTML': '<a href="https://next.bgm.tv/demo/access-token" target="_blank">'
+                                                    '<u>获取access-token</u></a><br>'
+                                                    'emby添加你mp的webhook(event要包括播放): '
+                                                    'http://127.0.0.1:3001/api/v1/webhook?token=moviepilot<br>'
                                                     '感谢@HankunYu的想法'
-                                            ,
-                                            'style': 'white-space: pre-line;'
-                                        }
+                                                }
+                                            }
+                                        ]
                                     }
                                 ]
                             }
