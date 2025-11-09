@@ -10,10 +10,10 @@ from requests import Response, Session
 from app.chain.mediaserver import MediaServerChain
 from app.core.cache import cached
 from app.core.config import settings
+from app.core.context import MediaInfo
 from app.core.event import eventmanager, Event
 from app.core.meta.metabase import MetaBase
 from app.core.metainfo import MetaInfoPath
-from app.core.module import ModuleManager
 from app.db.models.mediaserver import MediaServerItem
 from app.log import logger
 from app.plugins import _PluginBase
@@ -64,7 +64,12 @@ class BangumiAPIClient:
             "put": _req.put_res,
             "request": _req.request,
         }
-        self.uid = self.username()
+
+    @property
+    def uid(self):
+        if not getattr(self, '_uid', None):
+            setattr(self, '_uid', self.username())
+        return getattr(self, '_uid')
 
     @cached(maxsize=1024, ttl=60 * 60 * 6)
     def __cached_invoke(self, method, *args, **kwargs):
@@ -83,8 +88,8 @@ class BangumiAPIClient:
         # 检查响应
         if resp is None:
             raise ConnectionError(f"{method}: {req_url}, 返回值为空")
-        # 处理204状态码（无内容）
-        elif resp.status_code == 204:
+        # 处理202, 204状态码（无内容）
+        elif resp.status_code in (202, 204):
             return True
 
         result = resp.json()
@@ -187,7 +192,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "2.0.0"
+    plugin_version = "2.0.1"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
@@ -217,8 +222,7 @@ class BangumiSync(_PluginBase):
             self._user = config.get('user', "")
             self._uniqueid_match = config.get('uniqueid_match', False)
             self._notify = config.get('notify', False)
-            _token = config.get('token')
-        if self._enable and _token:
+        if self._enable and (_token := config.get('token')):
             self.bangumi_client = BangumiAPIClient(token=_token, ua=BangumiSync.UA)
             logger.info(f"Bangumi在看同步插件 v{BangumiSync.plugin_version} 初始化成功")
 
@@ -244,29 +248,25 @@ class BangumiSync(_PluginBase):
 
             title = None
             air_date = None
-            language = "ja"
             epinfo = None
             logger.info(f"匹配播放事件 {event_info.item_name} ...")
             # 解析事件元数据
             meta = self.parse_event_meta(event_info)
             # 获取媒体信息
             mediainfo = self.chain.recognize_media(meta)
-            if mediainfo:
-                title = mediainfo.original_title
-                air_date = mediainfo.release_date
-                language = mediainfo.original_language
-            else:
+            if not mediainfo:
                 title = meta.name
+            else:
+                # 使用源语言标题
+                title = mediainfo.original_title
 
-            if mediainfo.type == MediaType.TV:
-                with self.temporary_attributes(
-                    ModuleManager().get_running_module("TheMovieDbModule"),
-                    **{
-                        "tmdb.season_obj.language": language,
-                        "tmdb.tv.language": language,
-                    },
-                ):
-                    air_date, epinfo = self.__lookup_episode(meta=meta, unique_id=event_info.tmdb_id)
+                if mediainfo.type == MediaType.TV:
+                    air_date, epinfo = self.__lookup_episode(season=meta.begin_season, episode=meta.begin_episode,
+                                                             mediainfo=mediainfo, unique_id=event_info.tmdb_id)
+
+                if air_date is None:
+                    air_date = self._season_air_date(mediainfo=mediainfo, season=meta.begin_season)
+
             # 匹配Bangumi 条目
             subject_id = self.get_subjectid(title=title, air_date=air_date, type=meta.type)
 
@@ -275,15 +275,15 @@ class BangumiSync(_PluginBase):
                 self.update_collection_status(subject_id, 2)
             else:
                 self.sync_tv_status(subject_id, meta.begin_episode, epinfo)
-        except ImmediateException as e:
+        except Exception as e:
             err_msg = f"{self._prefix} 同步失败:\n {str(e)}"
             logger.error(err_msg)
-            if self._notify:
+            if self._notify and isinstance(e, ImmediateException):
                 self.post_message(
                     mtype=NotificationType.Manual,
                     title=self.plugin_name,
                     text=err_msg,
-                    image=mediainfo.get_message_image(),
+                    image=mediainfo.get_message_image() if mediainfo else None,
                 )
 
     def parse_event_meta(self, event_info: WebhookEventInfo) -> MetaBase:
@@ -337,51 +337,55 @@ class BangumiSync(_PluginBase):
         meta.tmdbid = tmdb_id
         return meta
 
-    def __lookup_episode(self, meta: MetaBase, unique_id) -> Dict[str, Any]:
+    def __lookup_episode(self, season: int, episode: int, mediainfo: MediaInfo, unique_id) -> tuple[Optional[str], Any]:
         """
         通过tmdb获取播出日期和剧集信息
-        """
-        episode_num = meta.begin_episode
 
+        :param season: 季号
+        :param episode: 集号
+        :param mediainfo: 媒体信息
+        :param unique_id: 唯一标识
+        """
         episodes: list[dict] = None
+        language = mediainfo.original_language
+
+        tmdb_obj = self.chain.modulemanager.get_running_module("TheMovieDbModule")
 
         def _get_episodes_by_group(tmdbid: int, season: int):
             """
             通过episode group获取剧集信息
             """
             from app.db.subscribe_oper import SubscribeOper
-            from app.modules.themoviedb.tmdbapi import TmdbApi
-
-            subscribe_oper = SubscribeOper()
-            tmdbapi = TmdbApi()
 
             group_id = None
 
-            subs = subscribe_oper.list_by_tmdbid(tmdbid, season)
+            subs = SubscribeOper().list_by_tmdbid(tmdbid, season)
             for sub in subs:
                 if sub.episode_group:
                     group_id = sub.episode_group
                     break
             if not group_id:
-                groups = tmdbapi.tv.episode_groups(tmdbid) or []
-
                 # 有些番剧拥有多个Seasons结果，比如我独自升级，其中一个Seasons是将总集篇作为一集，因此我们选择episode_count最小的一个
                 seasons = [
-                    result for result in groups if result.get("name") == "Seasons"
+                    result for result in mediainfo.episode_groups if result.get("name") == "Seasons"
                 ]
                 if seasons:
                     season_group = min(seasons, key=lambda x: x.get("episode_count"))
                     group_id = season_group.get("id")
             if group_id:
-                resp = tmdbapi.tv.group_episodes(group_id) or []
+                resp = tmdb_obj.tmdb.tv.group_episodes(group_id) or []
                 for group in resp:
                     if group["order"] == season:
                         return group
             return None
 
-        result = self.chain.tmdb_info(
-            meta.tmdbid, mtype=meta.type, season=meta.begin_season
-        ) or _get_episodes_by_group(meta.tmdbid, meta.begin_season)
+        with self.temporary_attributes(
+            tmdb_obj,
+            **{"tmdb.season_obj.language": language, "tmdb.tv.language": language},
+        ):
+            result = self.chain.tmdb_info(
+                mediainfo.tmdb_id, mediainfo.type, season
+            ) or _get_episodes_by_group(mediainfo.tmdb_id, season)
 
         if result:
             episodes = result.get("episodes")
@@ -407,10 +411,10 @@ class BangumiSync(_PluginBase):
                 if ep.get("id") == unique_id:
                     matched_episode = ep
                     break
-            elif ep.get("order", -99) + 1 == episode_num:
+            elif ep.get("order", -99) + 1 == episode:
                 matched_episode = ep
                 break
-            elif ep.get("episode_number") == episode_num:
+            elif ep.get("episode_number") == episode:
                 matched_episode = ep
                 break
             if ep.get("episode_type") in ["finale", "mid_season"]:
@@ -425,8 +429,10 @@ class BangumiSync(_PluginBase):
     def get_subjectid(self, title, air_date, type: MediaType) -> Optional[int]:
         """
         获取 bangumi 条目
+
         :param title: 标题
         :param air_date: 上映/首播日期
+        :param type: 媒体类型
         """
         logger.info(f"{self._prefix}: 正在搜索 Bangumi 对应条目...")
 
@@ -440,7 +446,7 @@ class BangumiSync(_PluginBase):
                     logger.info(f"{subject.get('name_cn', '')} https://bgm.tv/subject/{subject_id}")
                     return subject_id
 
-        raise ImmediateException(f"{self._prefix}: 未找到对应的 Bangumi 条目")
+        raise ImmediateException("未找到对应的 Bangumi 条目")
 
     def sync_tv_status(self, subject_id, episode, tmdb_epinfo: dict):
 
@@ -521,7 +527,7 @@ class BangumiSync(_PluginBase):
                             f"匹配字段: {best_candidate['matched_fields']}")
 
         if not found_episode_id:
-            raise ImmediateException(f"{self._prefix}: 未找到episode，可能因为TMDB和BGM的episode映射关系不一致")
+            raise ImmediateException("未找到episode，可能因为TMDB和BGM的episode映射关系不一致")
 
         last_episode = matched_info == ep_info[-1]
 
@@ -549,7 +555,7 @@ class BangumiSync(_PluginBase):
         if resp:
             logger.info(f"{self._prefix}: 合集状态 {type_dict[old_type]} => {type_dict[new_type]}，在看状态更新成功")
         else:
-            raise ImmediateException(f"{self._prefix}: 合集状态 {type_dict[old_type]} => {type_dict[new_type]}，在看状态更新失败")
+            raise ImmediateException(f"合集状态 {type_dict[old_type]} => {type_dict[new_type]}，在看状态更新失败")
 
     def get_episodes_info(self, subject_id) -> List[dict]:
         all_episodes = []
@@ -572,7 +578,7 @@ class BangumiSync(_PluginBase):
             offset += limit
 
         if not all_episodes:
-            raise ImmediateException(f"{self._prefix}: 未获取到任何 episode info")
+            raise ImmediateException("未获取到任何 episode info")
 
         logger.debug(f"{self._prefix}: 获取 episode info 成功，共 {len(all_episodes)} 集")
 
@@ -587,24 +593,61 @@ class BangumiSync(_PluginBase):
         if resp:
             logger.info(f"{self._prefix}: 单集点格子成功")
         else:
-            raise ImmediateException(f"{self._prefix}: 单集点格子失败")
+            raise ImmediateException("单集点格子失败")
+
+    @staticmethod
+    def _season_air_date(mediainfo: MediaInfo, season: int) -> Optional[str]:
+        """
+        获取指定季度的播出日期
+
+        :param mediainfo: 媒体信息
+        :param season: 季号
+        :return: 播出日期，如果未找到则返回媒体的发布日期
+        """
+        air_date = next(
+            (
+                info.get("air_date")
+                for info in mediainfo.season_info
+                if season == info.get("season_number")
+            ),
+            mediainfo.release_date,
+        )
+        return air_date
 
     @contextmanager
     def temporary_attributes(self, obj, **kwargs):
         """
         临时修改对象属性的上下文管理器
+
         :param obj: 要修改的对象
         :param kwargs: 嵌套属性字典，如 {"tmdb.language": "zh-CN"}
         """
         obj_name = obj.__class__.__name__
         # 获取当前上下文状态
         state = _temp_attrs_state.get().copy()
-        obj_id = id(obj)
 
-        if obj_id not in state:
-            state[obj_id] = {}
+        @retry(ExceptionToCheck=ValueError, tries=5, delay=0.1, logger=logger)
+        def wait_and_check(target_obj, attr_name, expected_value, old_value):
+            """
+            等待属性值变为期望值或原始值
 
-        modifications = {}
+            :param target_obj: 目标对象
+            :param attr_name: 属性名
+            :param expected_value: 期望值（设置的值）
+            :param old_value: 原始值
+            :return: (current_value, should_restore) 元组，should_restore表示是否需要恢复
+            """
+            current_value = getattr(target_obj, attr_name, None)
+
+            # 当前值等于设置的值，则可以恢复
+            if current_value == expected_value:
+                return current_value, True
+
+            # 当前值等于原始值，说明已经被恢复了
+            if current_value == old_value:
+                return current_value, False
+
+            raise ValueError(f"Attribute value mismatch: expected {expected_value}, got {current_value}")
 
         try:
             # 应用修改
@@ -622,29 +665,36 @@ class BangumiSync(_PluginBase):
                 final_attr = attrs[-1]
                 old_value = getattr(current_obj, final_attr, None)
 
-                modifications[attr_path] = {
-                    'target_obj': current_obj,
-                    'attr_name': final_attr,
-                    'old_value': old_value
-                }
+                 # 如果当前值已经等于目标值，则跳过修改
+                if old_value == new_value:
+                    logger.debug(f"Skip: {obj_name}.{attr_path} already equals {new_value}")
+                    continue
+
+                state[attr_path] = (current_obj, final_attr, old_value, new_value)
 
                 # 设置新值
                 setattr(current_obj, final_attr, new_value)
                 logger.debug(f"Set: {obj_name}.{attr_path} = {new_value}")
 
             # 更新上下文状态
-            state[obj_id].update(modifications)
             token = _temp_attrs_state.set(state)
 
             yield
 
         finally:
             # 恢复原始值
-            try:
-                for attr_path, modification in modifications.items():
-                    target_obj = modification['target_obj']
-                    attr_name = modification['attr_name']
-                    old_value = modification['old_value']
+            for attr_path, modification in state.items():
+                target_obj, attr_name, old_value, new_value = modification
+                try:
+                    current_value, should_restore = wait_and_check(target_obj, attr_name, new_value, old_value)
+
+                    # 如果不需要恢复（已经被其他线程恢复），则跳过
+                    if not should_restore:
+                        continue
+
+                    # 当前值不等于设置的值
+                    if current_value != new_value:
+                        logger.warn(f"Already restored: {obj_name}.{attr_path} is already {old_value}")
 
                     if old_value is not None:
                         setattr(target_obj, attr_name, old_value)
@@ -652,9 +702,12 @@ class BangumiSync(_PluginBase):
                     elif hasattr(target_obj, attr_name):
                         delattr(target_obj, attr_name)
                         logger.debug(f"Remove: {obj_name}.{attr_path}")
-            finally:
-                # 恢复上下文
-                _temp_attrs_state.reset(token)
+
+                except ValueError as e:
+                    logger.error(f"Timeout: {obj_name}.{attr_path} was modified by another thread, "
+                                 f"{str(e)}, force restore")
+            # 恢复上下文
+            _temp_attrs_state.reset(token)
 
     @staticmethod
     def is_anime(event_info: WebhookEventInfo) -> bool:
