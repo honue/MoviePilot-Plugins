@@ -32,7 +32,7 @@ class Cd2Upload(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.9"
+    plugin_version = "0.1.0"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -227,24 +227,33 @@ class Cd2Upload(_PluginBase):
             logger.debug(f"cleanlink {cleanlink}")
 
             for file in waiting_process_list:
+                isCloudFile = False
+                
                 if not os.path.islink(file):
                     processed_list.remove(file)
                     logger.info(f"软链接符号不存在 {file}")
                     continue
-                if cleanlink and os.path.islink(file):
+
+                # 清理源文件标志
+                if cleanlink:
                     try:
                         target_file = os.readlink(file)
-                        os.remove(target_file)
-                        logger.info(f"清除源文件 {target_file}")
+                        if self._cd_mount_prefix_path in target_file:
+                            isCloudFile = True
+                            logger.info(f"源文件是网盘文件，不清理 {target_file}")
+                        else:
+                            os.remove(target_file)
+                            logger.info(f"清除源文件 {target_file}")
                     except FileNotFoundError:
                         logger.warning(f"无法删除 {file} 指向的目标文件，目标文件不存在")
                     except OSError as e:
                         logger.error(f"删除 {file} 目标文件失败: {e}")
 
-                if os.path.islink(file) and not os.path.exists(file):
+                # 源文件不存在，或者源文件是云文件
+                if not os.path.exists(file) or isCloudFile:
                     os.remove(file)
                     processed_list.remove(file)
-                    logger.info(f"删除本地链接文件 {file}")
+                    logger.info(f"删除本地链接符号 {file}")
 
                     # 构造 CloudDrive2 目标路径
                     cd2_dest = file.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)
@@ -253,7 +262,7 @@ class Cd2Upload(_PluginBase):
                     try:
                         with open(strm_file_path, "w") as strm_file:
                             strm_file.write(cd2_dest)
-                        logger.info(f"{cd2_dest} 写入STRM文件 -> {strm_file_path}")
+                        logger.info(f"生成strm文件 {strm_file_path} <- 写入 {cd2_dest} ") 
                     except OSError as e:
                         logger.error(f"写入 STRM 文件失败: {e}")
 
@@ -261,53 +270,6 @@ class Cd2Upload(_PluginBase):
                     logger.debug(f"{file} 未失效，跳过")
 
             self.save_data('processed_list', processed_list)
-
-    @eventmanager.register(EventType.WebhookMessage)
-    def record_favor(self, event: Event):
-        """
-        记录favor剧集
-        event='item.rate' channel='emby' item_type='TV' item_name='幽游白书' item_id=None item_path='/media/series/日韩剧/幽游白书 (2023)' season_id=None episode_id=None tmdb_id='121659' overview='该剧改编自富坚义博的同名漫画。讲述叛逆少年浦饭幽助（北村匠海 饰）为了救小孩不幸车祸身亡，没想到因此获得重生机会并成为灵界侦探，展开一段不可思议的人生。' percentage=None ip=None device_name=None client=None user_name='honue' image_url=None item_favorite=None save_reason=None item_isvirtual=None media_type='Series'
-        """
-        event_info: WebhookEventInfo = event.event_data
-        # 只处理剧集喜爱
-        if event_info.event != "item.rate" or event_info.item_type != "TV":
-            return
-        if event_info.channel != "emby":
-            logger.info("目前只支持Emby服务端")
-            return
-        title = event_info.item_name
-        tmdb_id = event_info.tmdb_id
-        if title.count(" S"):
-            logger.info("只处理喜爱整季，单集喜爱不处理")
-            return
-        try:
-            meta = MetaInfo(title)
-            mediainfo: MediaInfo = self.chain.recognize_media(meta=meta, tmdbid=tmdb_id, mtype=MediaType.TV)
-            # 存储历史记录
-            favor: Dict = self.get_data('favor') or {}
-            if favor.get(tmdb_id):
-                favor.pop(tmdb_id)
-                logger.info(f"{mediainfo.title_year} 取消更新通知")
-                self.chain.post_message(Notification(
-                    mtype=NotificationType.Plugin,
-                    title=f"{mediainfo.title_year} 取消更新通知", text=None, image=mediainfo.get_message_image()))
-            else:
-                favor[tmdb_id] = {
-                    "title": title,
-                    "type": mediainfo.type.value,
-                    "year": mediainfo.year,
-                    "poster": mediainfo.get_poster_image(),
-                    "overview": mediainfo.overview,
-                    "tmdbid": mediainfo.tmdb_id,
-                    "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                }
-                logger.info(f"{mediainfo.title_year} 加入更新通知")
-                self.chain.post_message(Notification(
-                    mtype=NotificationType.Plugin,
-                    title=f"{mediainfo.title_year} 加入更新通知", text=None, image=mediainfo.get_message_image()))
-            self.save_data('favor', favor)
-        except Exception as e:
-            logger.error(str(e))
 
     def get_state(self) -> bool:
         return self._enable
@@ -354,7 +316,7 @@ class Cd2Upload(_PluginBase):
                                         'component': 'VSwitch',
                                         'props': {
                                             'model': 'onlyonce',
-                                            'label': '立即运行一次',
+                                            'label': '立即上次一次',
                                         }
                                     }
                                 ]
@@ -369,7 +331,7 @@ class Cd2Upload(_PluginBase):
                                         'component': 'VSwitch',
                                         'props': {
                                             'model': 'cleanlink',
-                                            'label': '立即清理生成',
+                                            'label': '立即清理源文件与软链接，生成Strm',
                                         }
                                     }
                                 ]
