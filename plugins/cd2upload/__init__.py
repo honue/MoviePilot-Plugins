@@ -32,7 +32,7 @@ class Cd2Upload(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.1.0"
+    plugin_version = "0.1.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -254,16 +254,17 @@ class Cd2Upload(_PluginBase):
 
                 # 源文件不存在，或者源文件是云文件
                 if not os.path.exists(file) or isCloudFile:
-                    os.remove(file)
-                    processed_list.remove(file)
-                    logger.info(f"删除本地链接符号 {file}")
-
                     # 构造 CloudDrive2 目标路径
                     cd2_dest = ""
                     if isCloudFile:
                         cd2_dest = os.readlink(file)
                     else:
-                        cd2_dest = file.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)                        
+                        cd2_dest = file.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)       
+
+                    os.remove(file)
+                    processed_list.remove(file)
+                    logger.info(f"删除本地链接符号 {file}")
+                 
                     strm_file_path = os.path.splitext(file)[0] + '.strm'
 
                     try:
