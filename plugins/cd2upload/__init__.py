@@ -259,7 +259,11 @@ class Cd2Upload(_PluginBase):
                     logger.info(f"删除本地链接符号 {file}")
 
                     # 构造 CloudDrive2 目标路径
-                    cd2_dest = file.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)
+                    cd2_dest = ""
+                    if isCloudFile:
+                        cd2_dest = os.readlink(file)
+                    else:
+                        cd2_dest = file.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)                        
                     strm_file_path = os.path.splitext(file)[0] + '.strm'
 
                     try:
