@@ -208,6 +208,9 @@ class Cd2Upload(_PluginBase):
 
             real_source = os.readlink(softlink_source)
             logger.info(f'源文件路径 {real_source}')
+            if self._cd_mount_prefix_path in real_source:
+                logger.info(f'源文件 {real_source} 是网盘文件，不上传')
+                return True
 
             if not os.path.exists(cd2_dest):
                 # 将文件上传到当前文件夹 同步
