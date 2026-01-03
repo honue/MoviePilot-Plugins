@@ -1,8 +1,11 @@
 ### MoviePilot-Plugins 本仓库地址
 
 ```
-https://github.com/honue/MoviePilot-Plugins/
+fork 自 https://github.com/honue/MoviePilot-Plugins/ 感谢原作者
 ```
+
+本 fork 只是对原作者的快捷质量订阅插件进行了修改，适应当前 MP 版本。
+本 fork 有 AI 编程内容。
 
 - [ANi-Strm插件](./docs/anistrm.md)
 
@@ -36,9 +39,10 @@ https://github.com/honue/MoviePilot-Plugins/
 
 > 将在看的剧集自动同步到[豆瓣书影音档案](https://www.douban.com/note/745865495)
 
-- 快捷指令订阅
+- 快捷指令订阅(子修改版)
 
 > IOS快捷指令，快速选片添加订阅
+> [快捷指令](https://www.icloud.com/shortcuts/5000c9c9a8424d6f94baf5eaedd04f3a)
 
 - 插件日志删除
 
