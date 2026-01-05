@@ -8,6 +8,7 @@ from app.schemas.types import EventType
 from .skip_helper import *
 from app.log import logger
 from app.core.meta import MetaBase
+from app.helper.mediaserver import MediaServerHelper
 
 handle_threading = []
 lock = threading.Lock()
@@ -22,7 +23,7 @@ class AdaptiveIntroSkip(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/chapter.png"
     # 插件版本
-    plugin_version = "1.7.7"
+    plugin_version = "1.7.8"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -35,6 +36,12 @@ class AdaptiveIntroSkip(_PluginBase):
     auth_level = 1
 
     _enable: bool = False
+    _mediaserver_helper = None
+    _mediaserver = None
+    _mediaservers = None
+    _emby_server = None
+    _emby_host = None
+    _emby_apikey = None
     _user: str = ''
     _begin_min: str = '4'
     _end_min: str = '6'
@@ -43,8 +50,11 @@ class AdaptiveIntroSkip(_PluginBase):
     _spec = ''
 
     def init_plugin(self, config: dict = None):
+        self._mediaserver_helper = MediaServerHelper()
+        self._mediaserver = None
         if config:
             self._enable = config.get("enable") or False
+            self._mediaservers = config.get("mediaservers") or []
             self._user = config.get("user") or ""
             self._begin_min = str(config.get("begin_min")) or '4'
             self._end_min = str(config.get("end_min")) or '6'
@@ -53,6 +63,28 @@ class AdaptiveIntroSkip(_PluginBase):
             self._exclude = config.get("exclude") or ''
             # 特别指定开始 结束时间
             self._spec = config.get("spec") or ''
+            
+            if self._mediaservers:
+                self._mediaserver = [self._mediaservers[0]]
+
+        # 获取媒体服务信息
+        if self._mediaserver:
+            emby_servers = self._mediaserver_helper.get_services(
+                name_filters=self._mediaserver
+            )
+
+            for _, emby_server in emby_servers.items():
+                self._emby_server = emby_server.type
+                self._emby_apikey = emby_server.config.config.get("apikey")
+                self._emby_host = emby_server.config.config.get("host")
+                logger.info(f"获取到媒体服务器类型: {self._emby_server}")
+                logger.info(f"原始 host: {self._emby_host}")
+                logger.info(f"apikey: {self._emby_apikey}")
+                if not self._emby_host.endswith("/"):
+                    self._emby_host += "/"
+                if not self._emby_host.startswith("http"):
+                    self._emby_host = "http://" + self._emby_host
+            self.stop_service()
 
     @eventmanager.register(EventType.WebhookMessage)
     def hook(self, event: Event):
@@ -98,9 +130,12 @@ class AdaptiveIntroSkip(_PluginBase):
 
         # 当前正在播放集的信息
         current_percentage = event_info.percentage
-        current_video_item_id = get_current_video_item_id(item_id=event_info.item_id, season_id=event_info.season_id,
-                                                          episode_id=event_info.episode_id)
-        total_sec = get_total_time(current_video_item_id)
+        current_video_item_id = get_current_video_item_id(item_id=event_info.item_id,
+                                                          season_id=event_info.season_id,
+                                                          episode_id=event_info.episode_id, 
+                                                          base_url=self._emby_host, 
+                                                          api_key=self._emby_apikey)
+        total_sec = get_total_time(current_video_item_id, self._emby_host, self._emby_apikey)
         current_sec = int(current_percentage / 100 * total_sec)
 
         if self.trans_to_sec(begin_time) < current_sec < (total_sec - self.trans_to_sec(end_time)):
@@ -111,7 +146,9 @@ class AdaptiveIntroSkip(_PluginBase):
         # 剧集在某集之后的所有剧集的item_id
         next_episode_ids = get_next_episode_ids(item_id=event_info.item_id,
                                                 season_id=event_info.season_id,
-                                                episode_id=event_info.episode_id
+                                                episode_id=event_info.episode_id,
+                                                base_url=self._emby_host, 
+                                                api_key=self._emby_apikey
                                                 )
         if next_episode_ids:
             # 存储最新片头位置，新集入库使用本数据
@@ -125,7 +162,7 @@ class AdaptiveIntroSkip(_PluginBase):
                 intro_end = self.trans_to_sec(begin_time) if manual else current_sec
                 # 批量标记之后的所有剧集，不影响已经看过的标记
                 for next_episode_id in next_episode_ids:
-                    update_intro(next_episode_id, intro_end)
+                    update_intro(next_episode_id, intro_end, self._emby_host, self._emby_apikey)
                 chapter_info['intro_end'] = intro_end
                 logger.info(
                     f"【恢复播放】{event_info.item_name} 后续剧集片头设置在 {int(intro_end / 60)}分{int(intro_end % 60)}秒 结束")
@@ -134,7 +171,7 @@ class AdaptiveIntroSkip(_PluginBase):
                     total_sec - self.trans_to_sec(end_time)) and event_info.event == 'playback.stop') or manual:
                 credits_start = (total_sec - self.trans_to_sec(end_time)) if manual else current_sec
                 for next_episode_id in next_episode_ids:
-                    update_credits(next_episode_id, credits_start)
+                    update_credits(next_episode_id, credits_start, self._emby_host, self._emby_apikey)
                 chapter_info['credits_start'] = credits_start
                 logger.info(
                     f"【退出播放】{event_info.item_name} 后续剧集片尾设置在 {int(credits_start / 60)}分{int(credits_start % 60)}秒 开始")
@@ -179,7 +216,9 @@ class AdaptiveIntroSkip(_PluginBase):
             # 新入库剧集的item_id
             next_episode_ids = get_next_episode_ids(item_id=chapter_info.get("item_id"),
                                                     season_id=event_info.begin_season,
-                                                    episode_id=event_info.begin_episode)
+                                                    episode_id=event_info.begin_episode, 
+                                                    base_url=self._emby_host, 
+                                                    api_key=self._emby_apikey)
             if next_episode_ids:
                 break
             cnt += 1
@@ -193,13 +232,13 @@ class AdaptiveIntroSkip(_PluginBase):
         # 批量标记新入库的剧集
         intro_end = chapter_info.get("intro_end")
         for next_episode_id in next_episode_ids:
-            update_intro(next_episode_id, intro_end)
+            update_intro(next_episode_id, intro_end, self._emby_host, self._emby_apikey)
         logger.info(
             f"【新集入库】{series_name} {event_info.season_episode} ，片头设置在 {int(intro_end / 60)}分{int(intro_end % 60)}秒 结束")
 
         credits_start = chapter_info.get("credits_start")
         for next_episode_id in next_episode_ids:
-            update_credits(next_episode_id, credits_start)
+            update_credits(next_episode_id, credits_start, self._emby_host, self._emby_apikey)
         logger.info(
             f"【新集入库】{series_name} {event_info.season_episode} ，片尾设置在 {int(credits_start / 60)}分{int(intro_end % 60)}秒 开始")
 
@@ -216,191 +255,131 @@ class AdaptiveIntroSkip(_PluginBase):
         """
         return [
             {
-                'component': 'VForm',
+                'component': 'VCard',
+                'props': {'variant': 'outlined', 'class': 'mb-3'},
                 'content': [
                     {
-                        'component': 'VRow',
+                        'component': 'VCardTitle',
+                        'props': {'class': 'd-flex align-center'},
                         'content': [
                             {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 4
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VSwitch',
-                                        'props': {
-                                            'model': 'enable',
-                                            'label': '启用插件',
-                                        }
-                                    }
-                                ]
-                            }, {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 4
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'begin_min',
-                                            'label': '片头最晚结束于（分:秒）',
-                                            'placeholder': '4',
-                                        }
-                                    }
-                                ]
-                            }, {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 4
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'end_min',
-                                            'label': '片尾最早开始于最后（分:秒）',
-                                            'placeholder': '6',
-                                        }
-                                    }
-                                ]
-                            }
+                                'component': 'VIcon',
+                                'props': {'icon': 'mdi-cog', 'color': 'primary', 'class': 'mr-2'},
+                            },
+                            {'component': 'span', 'text': '插件基础设置'}
                         ]
                     },
+                    {'component': 'VDivider'},
                     {
-                        'component': 'VRow',
+                        'component': 'VCardText',
                         'content': [
                             {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 4
-                                },
+                                'component': 'VForm',
                                 'content': [
                                     {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'user',
-                                            'label': '媒体库用户名',
-                                            'placeholder': '多个以,分隔 留空默认全部用户',
-                                        }
-                                    }
-                                ]
-                            }, {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 4
-                                },
-                                'content': [
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {'cols': 12, 'md': 4},
+                                                'content': [
+                                                    {'component': 'VSwitch', 'props': {'model': 'enable', 'label': '启用插件'}}
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {'cols': 12, 'md': 4},
+                                                'content': [
+                                                    {'component': 'VTextField', 'props': {'model': 'begin_min', 'label': '片头最晚结束于（分:秒）', 'placeholder': '4'}}
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {'cols': 12, 'md': 4},
+                                                'content': [
+                                                    {'component': 'VTextField', 'props': {'model': 'end_min', 'label': '片尾最早开始于最后（分:秒）', 'placeholder': '6'}}
+                                                ]
+                                            }
+                                        ]
+                                    },
                                     {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'exclude',
-                                            'label': '媒体路径排除关键词',
-                                            'placeholder': '多个关键词以,分隔',
-                                        }
-                                    }
-                                ]
-                            }, {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 4
-                                },
-                                'content': [
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {'cols': 12, 'md': 4},
+                                                'content': [
+                                                    {'component': 'VTextField', 'props': {'model': 'user', 'label': '媒体库用户名', 'placeholder': '多个以,分隔 留空默认全部用户'}}
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {'cols': 12, 'md': 4},
+                                                'content': [
+                                                    {'component': 'VTextField', 'props': {'model': 'exclude', 'label': '媒体路径排除关键词', 'placeholder': '多个关键词以,分隔'}}
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {'cols': 12, 'md': 4},
+                                                'content': [
+                                                    {'component': 'VTextField', 'props': {'model': 'include', 'label': '媒体路径包含关键词', 'placeholder': '多个关键词以,分隔'}}
+                                                ]
+                                            }
+                                        ]
+                                    },
                                     {
-                                        'component': 'VTextField',
-                                        'props': {
-                                            'model': 'include',
-                                            'label': '媒体路径包含关键词',
-                                            'placeholder': '多个关键词以,分隔',
-                                        }
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {'cols': 12, 'md': 12},
+                                                'content': [
+                                                    {'component': 'VTextarea', 'props': {'model': 'spec', 'rows': 6, 'label': '特别指定开始结束时间段', 'placeholder': '关键词#分:秒#分:秒，*结尾为指定时间点'}}
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {'cols': 12, 'md': 12},
+                                                'content': [
+                                                    {'component': 'VSelect', 'props': {'multiple': True, 'chips': True, 'clearable': True, 'model': 'mediaservers', 'label': '媒体服务器', 'items': [
+                                                        {'title': config.name, 'value': config.name} for config in self._mediaserver_helper.get_configs().values() if config.type in ['emby', 'jellyfin']
+                                                    ], 'hint': '可多选媒体服务器', 'persistent-hint': True}}
+                                                ]
+                                            }
+                                        ]
                                     }
                                 ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
+                            },
                             {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                    'md': 12
-                                },
+                                'component': 'VRow',
                                 'content': [
                                     {
-                                        'component': 'VTextarea',
-                                        'props': {
-                                            'model': 'spec',
-                                            'rows': 6,
-                                            'label': '特别指定开始结束时间段',
-                                            'placeholder': '用关键词特别指定开始结束时间段，格式：关键词#分:秒#分:秒。若以*结尾则指定时间点。',
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                },
-                                'content': [
+                                        'component': 'VCol',
+                                        'props': {'cols': 12},
+                                        'content': [
+                                            {'component': 'VAlert', 'props': {'type': 'warning', 'variant': 'tonal', 'text': 'Supported by ChapterAPI, 目前只支持Emby, Emby需要安装ChapterAPI插件，需要在emby通知中添加mp的回调webhook。v1.6遇到问题请重置插件'}}
+                                        ]
+                                    },
                                     {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'warning',
-                                            'variant': 'tonal',
-                                            'text': 'Supported by ChapterAPI, 目前只支持Emby, Emby需要安装ChapterAPI插件，需要在emby通知中添加mp的回调webhook。v1.6遇到问题请重置插件'
-                                        }
-                                    }
-                                ]
-                            }, {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                },
-                                'content': [
+                                        'component': 'VCol',
+                                        'props': {'cols': 12},
+                                        'content': [
+                                            {'component': 'VAlert', 'props': {'type': 'success', 'variant': 'tonal', 'text': '在片头限定时间内，暂停一下恢复播放能够将后续剧集的片头跳转全标记在这个点，在片尾限定时间内，片尾正常退出播放能够将后续剧集的片尾开始全标记在这个点，如有问题欢迎交流。'}},
+                                            {'component': 'VAlert', 'props': {'type': 'success', 'variant': 'tonal', 'text': '目前回报暂停信息的只有emby官方的客户端(包括小秘)、网页端，所以只推荐这几个客户端的用户使用。'}}
+                                        ]
+                                    },
                                     {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'success',
-                                            'variant': 'tonal',
-                                            'text': '在片头限定时间内，暂停一下恢复播放能够将后续剧集的片头跳转全标记在这个点，在片尾限定时间内，片尾正常退出播放能够将后续剧集的片尾开始全标记在这个点，如有问题欢迎交流。'
-                                        }
-                                    }, {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'success',
-                                            'variant': 'tonal',
-                                            'text': '目前回报暂停信息的只有emby官方的客户端(包括小秘)、网页端，所以只推荐这几个客户端的用户使用。'
-                                        }
-                                    }
-                                ]
-                            }, {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'info',
-                                            'variant': 'tonal',
-                                            "text": "具体安装使用说明见README https://github.com/honue/MoviePilot-Plugins"
-                                        }
+                                        'component': 'VCol',
+                                        'props': {'cols': 12},
+                                        'content': [
+                                            {'component': 'VAlert', 'props': {'type': 'info', 'variant': 'tonal', 'text': '具体安装使用说明见README https://github.com/honue/MoviePilot-Plugins'}}
+                                        ]
                                     }
                                 ]
                             }
@@ -409,13 +388,14 @@ class AdaptiveIntroSkip(_PluginBase):
                 ]
             }
         ], {
-            "enable": False,
-            "begin_min": '4',
-            "end_min": '6',
-            "include": '',
-            "exclude": '',
-            "spec": '',
-            "user": ''
+            'enable': False,
+            'begin_min': '4',
+            'end_min': '6',
+            'include': '',
+            'exclude': '',
+            'spec': '',
+            'user': '',
+            'mediaservers': [],
         }
 
     def get_state(self) -> bool:

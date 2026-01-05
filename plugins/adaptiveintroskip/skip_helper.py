@@ -1,21 +1,9 @@
 import requests
-from app.core.config import settings
 from app.log import logger
 from datetime import datetime
 
-# Emby API 地址和授权标头
-base_url = settings.EMBY_HOST
-
-if base_url is None:
-    logger.error('请配置EMBY_HOST变量')
-
-if not base_url.endswith("/"):
-    base_url += "/"
-if not base_url.startswith("http"):
-    base_url = "http://" + base_url
-api_key = settings.EMBY_API_KEY
-headers = {'X-Emby-Token': api_key}
-
+def get_headers(api_key):
+    return {'X-Emby-Token': api_key}  # ← api_key 有值，正常返回
 
 def format_time(seconds):
     # 将秒数转换为 datetime.timedelta 对象
@@ -25,10 +13,10 @@ def format_time(seconds):
     return formatted_time
 
 
-def get_next_episode_ids(item_id, season_id, episode_id) -> list:
+def get_next_episode_ids(item_id, season_id, episode_id, base_url, api_key) -> list:
     try:
         ids = []
-        response = requests.get(f'{base_url}Shows/{item_id}/Episodes', headers=headers)
+        response = requests.get(f'{base_url}Shows/{item_id}/Episodes', headers = get_headers(api_key))
         episodes_info = response.json()
         # 查找下一集的 ID
         for idx, episode in enumerate(episodes_info['Items']):
@@ -41,9 +29,9 @@ def get_next_episode_ids(item_id, season_id, episode_id) -> list:
         logger.error("异常错误：%s" % str(e))
 
 
-def get_current_video_item_id(item_id, season_id, episode_id):
+def get_current_video_item_id(item_id, season_id, episode_id, base_url, api_key):
     try:
-        response = requests.get(f'{base_url}Shows/{item_id}/Episodes', headers=headers)
+        response = requests.get(f'{base_url}Shows/{item_id}/Episodes', headers = get_headers(api_key))
         episodes_info = response.json()
         # 查找当前集的 ID
         for episode in episodes_info['Items']:
@@ -56,51 +44,51 @@ def get_current_video_item_id(item_id, season_id, episode_id):
         logger.error("异常错误：%s" % str(e))
 
 
-def update_intro(item_id, intro_end):
+def update_intro(item_id, intro_end, base_url, api_key):
     try:
         # 每次先移除旧的introskip
         chapter_info = requests.get(f"{base_url}emby/chapter_api/get_chapters?id={item_id}",
-                                    headers=headers).json()
+                                    headers = get_headers(api_key)).json()
         old_tags = [chapter['Index'] for chapter in chapter_info['chapters'] if
                     chapter['MarkerType'].startswith('Intro')]
         # 删除旧的
         requests.get(
             f"{base_url}emby/chapter_api/update_chapters?id={item_id}&index_list={','.join(map(str, old_tags))}&action=remove",
-            headers=headers)
+            headers = get_headers(api_key))
         # 添加新的片头开始
         requests.get(
             f"{base_url}emby/chapter_api/update_chapters?id={item_id}&action=add&name=%E7%89%87%E5%A4%B4&type=intro_start&time=00:00:00.000",
-            headers=headers)
+            headers = get_headers(api_key))
         # 新的片头结束
         requests.get(
             f"{base_url}emby/chapter_api/update_chapters?id={item_id}&action=add&name=%E7%89%87%E5%A4%B4%E7%BB%93%E6%9D%9F&type=intro_end&time={format_time(intro_end)}",
-            headers=headers)
+            headers = get_headers(api_key))
         return intro_end
     except Exception as e:
         logger.error("异常错误：%s" % str(e))
 
 
-def update_credits(item_id, credits_start):
+def update_credits(item_id, credits_start, base_url, api_key):
     try:
         chapter_info = requests.get(f"{base_url}emby/chapter_api/get_chapters?id={item_id}",
-                                    headers=headers).json()
+                                    headers = get_headers(api_key)).json()
         old_tags = [chapter['Index'] for chapter in chapter_info['chapters'] if
                     chapter['MarkerType'].startswith('Credits')]
         # 删除旧的
         requests.get(
             f"{base_url}emby/chapter_api/update_chapters?id={item_id}&index_list={','.join(map(str, old_tags))}&action=remove",
-            headers=headers)
+            headers = get_headers(api_key))
 
         # 添加新的片尾开始
         requests.get(
             f"{base_url}emby/chapter_api/update_chapters?id={item_id}&action=add&name=%E7%89%87%E5%B0%BE&type=credits_start&time={format_time(credits_start)}",
-            headers=headers)
+            headers = get_headers(api_key))
         return credits_start
     except Exception as e:
         logger.error("异常错误：%s" % str(e))
 
 
-def get_total_time(item_id):
+def get_total_time(item_id,  base_url, api_key):
     try:
         response = requests.get(f'{base_url}emby/Items/{item_id}/PlaybackInfo?api_key={api_key}')
         video_info = response.json()
