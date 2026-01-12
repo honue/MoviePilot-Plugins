@@ -32,7 +32,7 @@ class Cd2Upload(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.1.2"
+    plugin_version = "0.1.3"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -206,6 +206,9 @@ class Cd2Upload(_PluginBase):
                     logger.error(f'上传失败 {softlink_source} {cd2_dest}')
                     continue
             logger.info("上传完毕，STRM文件将在链接文件失效后生成")
+
+            process_list = list(dict.fromkeys(process_list))
+            processed_list = list(dict.fromkeys(processed_list))
             self.save_data('waiting_process_list', process_list)
             self.save_data('processed_list', processed_list)
             end_time = time.time()
@@ -248,12 +251,15 @@ class Cd2Upload(_PluginBase):
     def clean(self, cleansource: bool = False, task_list=None):
         if task_list is None:
             task_list = []
+        else:
+            logger.info(f"监控到整理网盘文件：{task_list}，立即生成Strm文件。")
         with lock:
             temp_list = self.get_data('processed_list') or []
             temp_list = temp_list + task_list
 
             waiting_process_list = self.get_data('waiting_process_list') or []
             waiting_process_list = [item for item in waiting_process_list if item not in task_list]
+            waiting_process_list = list(dict.fromkeys(waiting_process_list))
             self.save_data('waiting_process_list', waiting_process_list)
 
             processed_list = temp_list.copy()
@@ -307,7 +313,7 @@ class Cd2Upload(_PluginBase):
 
                 else:
                     logger.debug(f"{file} 未失效，跳过")
-
+            processed_list = list(dict.fromkeys(processed_list))
             self.save_data('processed_list', processed_list)
 
     def get_state(self) -> bool:
