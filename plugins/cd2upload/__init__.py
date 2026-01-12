@@ -32,7 +32,7 @@ class Cd2Upload(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.1.1"
+    plugin_version = "0.1.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -46,8 +46,9 @@ class Cd2Upload(_PluginBase):
 
     _enable = True
     _cron = '20'
+    _save_days = '3'
     _onlyonce = False
-    _cleanlink = False
+    _cleansource = False
 
     # 链接前缀
     _softlink_prefix_path = '/strm/'
@@ -62,8 +63,9 @@ class Cd2Upload(_PluginBase):
         if config:
             self._enable = config.get('enable', False)
             self._cron: int = int(config.get('cron', '20'))
+            self._save_days: int = int(config.get('save_days', '3'))
             self._onlyonce = config.get('onlyonce', False)
-            self._cleanlink = config.get('cleanlink', False)
+            self._cleansource = config.get('cleansource', False)
             self._cookie = config.get('cookie', '')
             self._softlink_prefix_path = config.get('softlink_prefix_path', '/strm/')
             # 用于修改链接
@@ -94,14 +96,15 @@ class Cd2Upload(_PluginBase):
                                     name="cd2转移")
             logger.info(f"cd2转移，立即运行一次")
 
-        if self._cleanlink:
-            # 清理无效软链接
-            self._scheduler.add_job(func=self.clean, kwargs={"cleanlink": True}, trigger='date',
+        if self._cleansource:
+            # 清理软链接与源文件？
+            self._scheduler.add_job(func=self.clean, kwargs={"cleansource": True}, trigger='date',
                                     run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-                                    name="清理无效软链接")
+                                    name="清理软链接与源文件")
 
-        self._scheduler.add_job(func=self.clean, kwargs={"cleanlink": False}, trigger='interval', minutes=20,
-                                name="清理无效软链接")
+        # 本地源文件保留周期？，超过这个时间清理源文件，生成strm指向网盘
+        self._scheduler.add_job(func=self.clean, kwargs={"cleansource": True}, trigger='interval', days=self._save_days,
+                                name="清理软链接与源文件")
 
         if self._scheduler.get_jobs():
             # 启动服务
@@ -113,7 +116,7 @@ class Cd2Upload(_PluginBase):
             'enable': self._enable,
             'cron': self._cron,
             'onlyonce': False,
-            'cleanlink': False,
+            'cleansource': False,
             'softlink_prefix_path': self._softlink_prefix_path,
             'cd_mount_prefix_path': self._cd_mount_prefix_path
         })
@@ -127,9 +130,29 @@ class Cd2Upload(_PluginBase):
             # 等待转移的文件的链接的完整路径
             waiting_process_list = self.get_data('waiting_process_list') or []
             waiting_process_list = waiting_process_list + transfer_info.file_list_new
+            # 去重
+            waiting_process_list = list(dict.fromkeys(waiting_process_list))
             self.save_data('waiting_process_list', waiting_process_list)
 
         logger.info(f'新入库，加入待转移列表 {transfer_info.file_list_new}')
+
+        # 判断是不是网盘整理的剧
+        isCloudFile = False
+        for source_file in transfer_info.file_list:
+            if self._cd_mount_prefix_path in source_file:
+                isCloudFile = True
+        if isCloudFile:
+            self._scheduler.add_job(func=self.clean,
+                                    kwargs={"cleansource": True, "task_list": transfer_info.file_list_new},
+                                    trigger='date',
+                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
+                                    name="清理软链接,生成strm")
+            self.chain.post_message(Notification(
+                mtype=NotificationType.Plugin,
+                title=f"监听到整理网盘文件",
+                text=f"现开始生成strm文件 {transfer_info.file_list}"
+                ))
+            return
 
         # 判断段转移任务开始时间 新剧晚点上传 老剧立马上传
         media_info: MediaInfo = event.event_data.get('mediainfo', {})
@@ -140,7 +163,7 @@ class Cd2Upload(_PluginBase):
                                                    season=media_info.season)
             if is_exist:
                 if not self._scheduler.get_jobs():
-                    logger.info(f'追更剧集,{self._cron}分钟后开始执行任务...')
+                    logger.info(f'追更剧集,{self._cron}分钟后开始执行上传任务...')
                 try:
                     self._scheduler.remove_all_jobs()
                     self._scheduler.add_job(func=self.task, trigger='date',
@@ -222,55 +245,63 @@ class Cd2Upload(_PluginBase):
             logger.error(e)
             return False
 
-    def clean(self, cleanlink: bool = False):
+    def clean(self, cleansource: bool = False, task_list=None):
+        if task_list is None:
+            task_list = []
         with lock:
-            waiting_process_list = self.get_data('processed_list') or []
-            processed_list = waiting_process_list.copy()
-            logger.info(f"已处理列表：{processed_list}")
-            logger.debug(f"cleanlink {cleanlink}")
+            temp_list = self.get_data('processed_list') or []
+            temp_list = temp_list + task_list
 
-            for file in waiting_process_list:
+            waiting_process_list = self.get_data('waiting_process_list') or []
+            waiting_process_list = [item for item in waiting_process_list if item not in task_list]
+            self.save_data('waiting_process_list', waiting_process_list)
+
+            processed_list = temp_list.copy()
+            logger.info(f"已处理列表：{processed_list}")
+            logger.debug(f"cleansource {cleansource}")
+
+            for file in temp_list:
                 isCloudFile = False
-                
+
                 if not os.path.islink(file):
                     processed_list.remove(file)
-                    logger.info(f"软链接符号不存在 {file}")
+                    logger.info(f"软链接不存在 {file}")
                     continue
 
                 # 清理源文件标志
-                if cleanlink:
+                if cleansource:
                     try:
-                        target_file = os.readlink(file)
-                        if self._cd_mount_prefix_path in target_file:
+                        source_file = os.readlink(file)
+                        if self._cd_mount_prefix_path in source_file:
                             isCloudFile = True
-                            logger.info(f"源文件是网盘文件，不清理 {target_file}")
+                            logger.info(f"源文件是网盘文件，不清理 {source_file}")
                         else:
-                            os.remove(target_file)
-                            logger.info(f"清除源文件 {target_file}")
+                            os.remove(source_file)
+                            logger.info(f"清除源文件 {source_file}")
                     except FileNotFoundError:
                         logger.warning(f"无法删除 {file} 指向的目标文件，目标文件不存在")
                     except OSError as e:
                         logger.error(f"删除 {file} 目标文件失败: {e}")
 
-                # 源文件不存在，或者源文件是云文件
+                # 清理完源文件了，或者源文件是云文件。开始生成STRM文件
                 if not os.path.exists(file) or isCloudFile:
                     # 构造 CloudDrive2 目标路径
                     cd2_dest = ""
                     if isCloudFile:
                         cd2_dest = os.readlink(file)
                     else:
-                        cd2_dest = file.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)       
+                        cd2_dest = file.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)
 
                     os.remove(file)
                     processed_list.remove(file)
-                    logger.info(f"删除本地链接符号 {file}")
-                 
+                    logger.info(f"删除软链接 {file}")
+
                     strm_file_path = os.path.splitext(file)[0] + '.strm'
 
                     try:
                         with open(strm_file_path, "w") as strm_file:
                             strm_file.write(cd2_dest)
-                        logger.info(f"生成strm文件 {strm_file_path} <- 写入 {cd2_dest} ") 
+                        logger.info(f"生成strm文件 {strm_file_path} <- 写入 {cd2_dest} ")
                     except OSError as e:
                         logger.error(f"写入 STRM 文件失败: {e}")
 
@@ -301,7 +332,7 @@ class Cd2Upload(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 3
+                                    'md': 4
                                 },
                                 'content': [
                                     {
@@ -317,14 +348,14 @@ class Cd2Upload(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 3
+                                    'md': 4
                                 },
                                 'content': [
                                     {
                                         'component': 'VSwitch',
                                         'props': {
                                             'model': 'onlyonce',
-                                            'label': '立即上次一次',
+                                            'label': '立即上传一次',
                                         }
                                     }
                                 ]
@@ -332,22 +363,28 @@ class Cd2Upload(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 3
+                                    'md': 4
                                 },
                                 'content': [
                                     {
                                         'component': 'VSwitch',
                                         'props': {
-                                            'model': 'cleanlink',
+                                            'model': 'cleansource',
                                             'label': '立即清理源文件与软链接，生成Strm',
                                         }
                                     }
                                 ]
-                            }, {
+                            }
+                        ]
+                    }
+                    , {
+                        'component': 'VRow',
+                        'content': [
+                            {
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 3
+                                    'md': 6
                                 },
                                 'content': [
                                     {
@@ -359,17 +396,34 @@ class Cd2Upload(_PluginBase):
                                         }
                                     }
                                 ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 6
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'save_days',
+                                            'label': '清理本地链接任务间隔（天）',
+                                            'placeholder': '3'
+                                        }
+                                    }
+                                ]
                             }
                         ]
-                    },
-                    {
+                    }
+                    , {
                         'component': 'VRow',
                         'content': [
                             {
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 6
                                 },
                                 'content': [
                                     {
@@ -385,7 +439,7 @@ class Cd2Upload(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 6
                                 },
                                 'content': [
                                     {
@@ -406,7 +460,7 @@ class Cd2Upload(_PluginBase):
             'enable': self._enable,
             'cron': self._cron,
             'onlyonce': self._onlyonce,
-            'cleanlink': self._cleanlink,
+            'cleansource': self._cleansource,
             'softlink_prefix_path': self._softlink_prefix_path,
             'cd_mount_prefix_path': self._cd_mount_prefix_path
         }
