@@ -3,6 +3,7 @@ import shutil
 import threading
 import time
 from datetime import datetime, timedelta
+from time import sleep
 from typing import List, Tuple, Dict, Any
 
 import pytz
@@ -16,6 +17,7 @@ from app.core.metainfo import MetaInfo
 from app.db import get_db
 from app.db.models.transferhistory import TransferHistory
 from app.db.subscribe_oper import SubscribeOper
+from app.db.transferhistory_oper import TransferHistoryOper
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas import TransferInfo, Notification, WebhookEventInfo
@@ -24,21 +26,21 @@ from app.schemas.types import EventType, MediaType, NotificationType
 lock = threading.Lock()
 
 
-class Cd2Upload(_PluginBase):
+class Cd2Strm(_PluginBase):
     # 插件名称
-    plugin_name = "cd2上传"
+    plugin_name = "cd2Strm"
     # 插件描述
     plugin_desc = "将新入库的媒体文件，通过cd2上传生成strm（自用）"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.1.3"
+    plugin_version = "0.0.1"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
     author_url = "https://github.com/honue"
     # 插件配置项ID前缀
-    plugin_config_prefix = "cd2upload_"
+    plugin_config_prefix = "Cd2Strm_"
     # 加载顺序
     plugin_order = 1
     # 可使用的用户级别
@@ -48,16 +50,20 @@ class Cd2Upload(_PluginBase):
     _cron = '20'
     _save_days = '3'
     _onlyonce = False
-    _cleansource = False
+    _cleanlocal = False
 
     # 链接前缀
-    _softlink_prefix_path = '/strm/'
+    _local_media_prefix_path = '/strm/'
     # cd2挂载本地媒体库前缀
     _cd_mount_prefix_path = '/CloudNAS/115/emby/'
 
     _scheduler = None
 
     _subscribe_oper = SubscribeOper()
+    _history_oper = TransferHistoryOper()
+
+    _data_key_waiting_upload = "waiting_upload_list_id"
+    _data_key_uploaded = "uploaded_list_id"
 
     def init_plugin(self, config: dict = None):
         if config:
@@ -65,9 +71,8 @@ class Cd2Upload(_PluginBase):
             self._cron: int = int(config.get('cron', '20'))
             self._save_days: int = int(config.get('save_days', '3'))
             self._onlyonce = config.get('onlyonce', False)
-            self._cleansource = config.get('cleansource', False)
-            self._cookie = config.get('cookie', '')
-            self._softlink_prefix_path = config.get('softlink_prefix_path', '/strm/')
+            self._cleanlocal = config.get('cleanlocal', False)
+            self._local_media_prefix_path = config.get('local_media_prefix_path', '/strm/')
             # 用于修改链接
             self._cd_mount_prefix_path = config.get('cd_mount_prefix_path', '/CloudNAS/CloudDrive/115/emby/')
 
@@ -76,35 +81,22 @@ class Cd2Upload(_PluginBase):
         if not self._enable:
             return
 
-        # 待定
-        file_num = int(os.getenv('FULL_RECENT', '0')) if os.getenv('FULL_RECENT', '0').isdigit() else 0
-        if file_num:
-            recent_files = [transfer_history.dest for transfer_history in
-                            TransferHistory.list_by_page(count=file_num, db=get_db())]
-            logger.info(f"补全 {len(recent_files)} \n {recent_files}")
-            with lock:
-                # 等待转移的文件的链接的完整路径
-                waiting_process_list = self.get_data('waiting_process_list') or []
-                waiting_process_list = waiting_process_list + recent_files
-                self.save_data('waiting_process_list', waiting_process_list)
-
         self._scheduler = BackgroundScheduler(timezone=settings.TZ)
 
         if self._onlyonce:
-            self._scheduler.add_job(func=self.task, trigger='date',
+            self._scheduler.add_job(func=self.upload_task, trigger='date',
                                     run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=10),
                                     name="cd2转移")
-            logger.info(f"cd2转移，立即运行一次")
+            logger.info(f"立即上传一次")
 
-        if self._cleansource:
-            # 清理软链接与源文件？
-            self._scheduler.add_job(func=self.clean, kwargs={"cleansource": True}, trigger='date',
+        if self._cleanlocal:
+            self._scheduler.add_job(func=self.del_dest_create_strm_task, kwargs={"now_delete": True}, trigger='date',
                                     run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-                                    name="清理软链接与源文件")
+                                    name="立即清理本地媒体库文件，创建Strm文件")
 
-        # 本地源文件保留周期？，超过这个时间清理源文件，生成strm指向网盘
-        self._scheduler.add_job(func=self.clean, kwargs={"cleansource": True}, trigger='interval', days=self._save_days,
-                                name="清理软链接与源文件")
+        # 媒体文件保留周期？，超过这个时间清理媒体文件，生成strm指向网盘
+        self._scheduler.add_job(func=self.del_dest_create_strm_task, trigger='interval', minutes=20,
+                                name="清理本地媒体库文件，创建Strm文件")
 
         if self._scheduler.get_jobs():
             # 启动服务
@@ -115,44 +107,41 @@ class Cd2Upload(_PluginBase):
         self.update_config({
             'enable': self._enable,
             'cron': self._cron,
+            'save_days': self._save_days,
             'onlyonce': False,
-            'cleansource': False,
-            'softlink_prefix_path': self._softlink_prefix_path,
+            'cleanlocal': False,
+            'local_media_prefix_path': self._local_media_prefix_path,
             'cd_mount_prefix_path': self._cd_mount_prefix_path
         })
 
     @eventmanager.register(EventType.TransferComplete)
-    def update_waiting_list(self, event: Event):
+    def update_waiting_upload_list(self, event: Event):
         transfer_info: TransferInfo = event.event_data.get('transferinfo', {})
         if not transfer_info.file_list_new:
             return
-        with lock:
-            # 等待转移的文件的链接的完整路径
-            waiting_process_list = self.get_data('waiting_process_list') or []
-            waiting_process_list = waiting_process_list + transfer_info.file_list_new
-            # 去重
-            waiting_process_list = list(dict.fromkeys(waiting_process_list))
-            self.save_data('waiting_process_list', waiting_process_list)
-
-        logger.info(f'新入库，加入待转移列表 {transfer_info.file_list_new}')
-
-        # 判断是不是网盘整理的剧
+        # 判断是不是网盘整理的剧,网盘剧跳过
         isCloudFile = False
         for source_file in transfer_info.file_list:
             if self._cd_mount_prefix_path in source_file:
                 isCloudFile = True
-        if isCloudFile:
-            self._scheduler.add_job(func=self.clean,
-                                    kwargs={"cleansource": True, "task_list": transfer_info.file_list_new},
-                                    trigger='date',
-                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-                                    name="清理软链接,生成strm")
-            self.chain.post_message(Notification(
-                mtype=NotificationType.Plugin,
-                title=f"监听到整理网盘文件",
-                text=f"现开始生成strm文件 {transfer_info.file_list}"
-                ))
-            return
+        with lock:
+            for target_file in transfer_info.file_list_new:
+                history: TransferHistory = self._history_oper.get_by_dest(dest=target_file)
+                if isCloudFile:
+                    logger.info(f"整理的是网盘文件 {history.src} ，不加入上传列表")
+                    logger.info(f"删除本地媒体库文件 {history.dest}")
+                    self.del_dest_file(history.id)
+                    logger.info(f"创建Strm文件")
+                    self.create_strm_task(history.id)
+                    return
+                else:
+                    waiting_upload_list_id = self.get_data(self._data_key_waiting_upload) or []
+                    waiting_upload_list_id = waiting_upload_list_id + history.id
+                    # 去重
+                    waiting_upload_list_id = list(dict.fromkeys(waiting_upload_list_id))
+                    self.save_data(self._data_key_waiting_upload, waiting_upload_list_id)
+
+        logger.info(f'新入库文件，加入待上传列表 {transfer_info.file_list_new}')
 
         # 判断段转移任务开始时间 新剧晚点上传 老剧立马上传
         media_info: MediaInfo = event.event_data.get('mediainfo', {})
@@ -165,65 +154,60 @@ class Cd2Upload(_PluginBase):
                 if not self._scheduler.get_jobs():
                     logger.info(f'追更剧集,{self._cron}分钟后开始执行上传任务...')
                 try:
-                    self._scheduler.remove_all_jobs()
-                    self._scheduler.add_job(func=self.task, trigger='date',
+                    for job in self._scheduler.get_jobs():
+                        if job.func == self.upload_task:
+                            self._scheduler.remove_job(job.id)
+                    # 移除其他已有的上传job
+                    self._scheduler.add_job(func=self.upload_task, trigger='date',
                                             kwargs={"media_info": media_info, "meta": meta},
                                             run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(
                                                 minutes=self._cron),
-                                            name="cd2转移")
+                                            name="cd2上传任务")
                 except Exception as err:
                     logger.error(f"定时任务配置错误：{str(err)}")
             else:
                 if not self._scheduler.get_jobs():
                     logger.info(f'已完结剧集,立即执行上传任务...')
-                self._scheduler.remove_all_jobs()
-                self._scheduler.add_job(func=self.task, trigger='date',
+                # 移除其他已有的上传job
+                for job in self._scheduler.get_jobs():
+                    if job.func == self.upload_task:
+                        self._scheduler.remove_job(job.id)
+
+                self._scheduler.add_job(func=self.upload_task, trigger='date',
                                         run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=5),
-                                        name="cd2转移")
+                                        name="cd2上传任务")
             self._scheduler.start()
 
-    def task(self, media_info: MediaInfo = None, meta: MetaBase = None):
-        start_time = time.time()
-        with (lock):
-            waiting_process_list = self.get_data('waiting_process_list') or []
-            processed_list = self.get_data('processed_list') or []
-
-            if not waiting_process_list:
-                logger.info('没有需要转移的媒体文件')
+    def upload_task(self, media_info: MediaInfo = None, meta: MetaBase = None):
+        with lock:
+            waiting_upload_id_list = self.get_data(self._data_key_waiting_upload) or []
+            uploaded_id_list = self.get_data(self._data_key_uploaded) or []
+            if not waiting_upload_id_list:
+                logger.info('没有需要上传的媒体文件')
                 return
-            logger.info('strm文件将在源文件被清理后生成 软链接符号将被替换 strm和链接符号只会存在一个')
-            logger.info(f'开始执行上传任务 {waiting_process_list} ')
-            process_list = waiting_process_list.copy()
-            total_num = len(waiting_process_list)
-            for softlink_source in waiting_process_list:
+            logger.info(f'开始执行上传任务 转移记录：{waiting_upload_id_list} ')
+            task_list = waiting_upload_id_list.copy()
+            total_num = len(waiting_upload_id_list)
+            for id in waiting_upload_id_list:
                 # 链接目录前缀 替换为 cd2挂载前缀
-                cd2_dest = softlink_source.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)
-                if self._upload_file(softlink_source=softlink_source, cd2_dest=cd2_dest):
-                    process_list.remove(softlink_source)
-                    processed_list.append(softlink_source)
-                    logger.info(f'【{total_num - len(process_list)}/{total_num}】 上传成功 {softlink_source} {cd2_dest}')
+                history: TransferHistory = self._history_oper.get(id)
+                cd2_dest = history.dest.replace(self._local_media_prefix_path, self._cd_mount_prefix_path)
+                if self._upload_file(local_source=history.src, cd2_dest=cd2_dest):
+                    task_list.remove(id)
+                    uploaded_id_list.append(id)
+                    logger.info(f'【{total_num - len(task_list)}/{total_num}】 上传成功 {history.src} {cd2_dest}')
                 else:
-                    logger.error(f'上传失败 {softlink_source} {cd2_dest}')
+                    logger.error(f'上传失败 {history.src} {cd2_dest}')
                     continue
-            logger.info("上传完毕，STRM文件将在链接文件失效后生成")
+            logger.info("上传完毕")
 
-            process_list = list(dict.fromkeys(process_list))
-            processed_list = list(dict.fromkeys(processed_list))
-            self.save_data('waiting_process_list', process_list)
-            self.save_data('processed_list', processed_list)
-            end_time = time.time()
+            task_list = list(dict.fromkeys(task_list))
+            uploaded_id_list = list(dict.fromkeys(uploaded_id_list))
 
-            favor: Dict = self.get_data('favor') or {}
-            tmdb_id = str(media_info.tmdb_id)
+            self.save_data(self._data_key_waiting_upload, task_list)
+            self.save_data(self._data_key_uploaded, uploaded_id_list)
 
-            if media_info and favor.get(tmdb_id) and media_info.type == MediaType.TV:
-                self.chain.post_message(Notification(
-                    mtype=NotificationType.Plugin,
-                    title=f"{media_info.title_year} {meta.episodes}",
-                    text=f"上传成功 用时{int(end_time - start_time)}秒",
-                    image=media_info.get_message_image()))
-
-    def _upload_file(self, softlink_source: str = None, cd2_dest: str = None) -> bool:
+    def _upload_file(self, local_source: str = None, cd2_dest: str = None) -> bool:
         logger.info('')
         try:
             cd2_dest_folder, cd2_dest_file_name = os.path.split(cd2_dest)
@@ -232,15 +216,14 @@ class Cd2Upload(_PluginBase):
                 os.makedirs(cd2_dest_folder)
                 logger.info(f'创建文件夹 {cd2_dest_folder}')
 
-            real_source = os.readlink(softlink_source)
-            logger.info(f'源文件路径 {real_source}')
-            if self._cd_mount_prefix_path in real_source:
-                logger.info(f'源文件 {real_source} 是网盘文件，不上传')
+            logger.info(f'源文件路径 {local_source}')
+            if self._cd_mount_prefix_path in local_source:
+                logger.info(f'源文件 {local_source} 是网盘文件，不上传')
                 return True
 
             if not os.path.exists(cd2_dest):
                 # 将文件上传到当前文件夹 同步
-                shutil.copy2(softlink_source, cd2_dest, follow_symlinks=True)
+                shutil.copy2(local_source, cd2_dest, follow_symlinks=True)
             else:
                 logger.info(f'{cd2_dest_file_name} 已存在 {cd2_dest}')
             return True
@@ -248,73 +231,51 @@ class Cd2Upload(_PluginBase):
             logger.error(e)
             return False
 
-    def clean(self, cleansource: bool = False, task_list=None):
-        if task_list is None:
-            task_list = []
-        else:
-            logger.info(f"监控到整理网盘文件：{task_list}，立即生成Strm文件。")
+    def del_dest_create_strm_task(self, now_delete: bool = False):
         with lock:
-            temp_list = self.get_data('processed_list') or []
-            temp_list = temp_list + task_list
-
-            waiting_process_list = self.get_data('waiting_process_list') or []
-            waiting_process_list = [item for item in waiting_process_list if item not in task_list]
-            waiting_process_list = list(dict.fromkeys(waiting_process_list))
-            self.save_data('waiting_process_list', waiting_process_list)
-
-            processed_list = temp_list.copy()
-            logger.info(f"已处理列表：{processed_list}")
-            logger.debug(f"cleansource {cleansource}")
-
-            for file in temp_list:
-                isCloudFile = False
-
-                if not os.path.islink(file):
-                    processed_list.remove(file)
-                    logger.info(f"软链接不存在 {file}")
+            uploaded_id_list = self.get_data(self._data_key_uploaded) or []
+            temp_list = uploaded_id_list.copy()
+            for id in temp_list:
+                history: TransferHistory = self._history_oper.get(id)
+                if (datetime.now() - history.date).total_seconds() > self._save_days * 86400:
+                    logger.info(f"{history.dest} 超过 {self._save_days} 天, 开始删除本地媒体文件，创建Strm")
+                    self.del_dest_file(id)
+                    self.create_strm_task(id)
                     continue
+                if now_delete:
+                    logger.info(f"立即删除本地媒体文件，创建Strm")
+                    self.del_dest_file(id)
+                    self.create_strm_task(id)
 
-                # 清理源文件标志
-                if cleansource:
-                    try:
-                        source_file = os.readlink(file)
-                        if self._cd_mount_prefix_path in source_file:
-                            isCloudFile = True
-                            logger.info(f"源文件是网盘文件，不清理 {source_file}")
-                        else:
-                            os.remove(source_file)
-                            logger.info(f"清除源文件 {source_file}")
-                    except FileNotFoundError:
-                        logger.warning(f"无法删除 {file} 指向的目标文件，目标文件不存在")
-                    except OSError as e:
-                        logger.error(f"删除 {file} 目标文件失败: {e}")
+    def del_dest_file(self, id: int):
+        try:
+            history: TransferHistory = self._history_oper.get(id)
+            os.remove(history.dest)
+            logger.info(f"清除目标文件 {history.dest}")
+        except FileNotFoundError:
+            logger.warning(f"无法删除 {history.dest} 目标文件，目标文件不存在")
+        except OSError as e:
+            logger.error(f"删除 {history.dest} 目标文件失败: {e}")
 
-                # 清理完源文件了，或者源文件是云文件。开始生成STRM文件
-                if not os.path.exists(file) or isCloudFile:
-                    # 构造 CloudDrive2 目标路径
-                    cd2_dest = ""
-                    if isCloudFile:
-                        cd2_dest = os.readlink(file)
-                    else:
-                        cd2_dest = file.replace(self._softlink_prefix_path, self._cd_mount_prefix_path)
+    def create_strm_task(self, id: int):
+        history: TransferHistory = self._history_oper.get(id)
+        if self._cd_mount_prefix_path in history.src:
+            isCloudFile = True
+        # 构造 CloudDrive2 目标路径
+        cd2_dest = ""
+        if isCloudFile:
+            cd2_dest = history.src
+        else:
+            cd2_dest = history.dest.replace(self._local_media_prefix_path, self._cd_mount_prefix_path)
 
-                    os.remove(file)
-                    processed_list.remove(file)
-                    logger.info(f"删除软链接 {file}")
+        strm_file_path = os.path.splitext(history.dest)[0] + '.strm'
 
-                    strm_file_path = os.path.splitext(file)[0] + '.strm'
-
-                    try:
-                        with open(strm_file_path, "w") as strm_file:
-                            strm_file.write(cd2_dest)
-                        logger.info(f"生成strm文件 {strm_file_path} <- 写入 {cd2_dest} ")
-                    except OSError as e:
-                        logger.error(f"写入 STRM 文件失败: {e}")
-
-                else:
-                    logger.debug(f"{file} 未失效，跳过")
-            processed_list = list(dict.fromkeys(processed_list))
-            self.save_data('processed_list', processed_list)
+        try:
+            with open(strm_file_path, "w") as strm_file:
+                strm_file.write(cd2_dest)
+            logger.info(f"生成strm文件 {strm_file_path} <- 写入 {cd2_dest} ")
+        except OSError as e:
+            logger.error(f"写入 STRM 文件失败: {e}")
 
     def get_state(self) -> bool:
         return self._enable
@@ -375,8 +336,8 @@ class Cd2Upload(_PluginBase):
                                     {
                                         'component': 'VSwitch',
                                         'props': {
-                                            'model': 'cleansource',
-                                            'label': '立即清理源文件与软链接，生成Strm',
+                                            'model': 'cleanlocal',
+                                            'label': '立即清理本地媒体文件，生成Strm',
                                         }
                                     }
                                 ]
@@ -414,7 +375,7 @@ class Cd2Upload(_PluginBase):
                                         'component': 'VTextField',
                                         'props': {
                                             'model': 'save_days',
-                                            'label': '清理本地链接任务间隔（天）',
+                                            'label': '清理本地媒体库文件任务间隔（天）',
                                             'placeholder': '3'
                                         }
                                     }
@@ -435,8 +396,8 @@ class Cd2Upload(_PluginBase):
                                     {
                                         'component': 'VTextField',
                                         'props': {
-                                            'model': 'softlink_prefix_path',
-                                            'label': '本地链接媒体库路径前缀',
+                                            'model': 'local_media_prefix_path',
+                                            'label': '本地媒体库路径前缀',
                                             'placeholder': '/strm/'
                                         }
                                     }
@@ -466,8 +427,8 @@ class Cd2Upload(_PluginBase):
             'enable': self._enable,
             'cron': self._cron,
             'onlyonce': self._onlyonce,
-            'cleansource': self._cleansource,
-            'softlink_prefix_path': self._softlink_prefix_path,
+            'cleanlocal': self._cleanlocal,
+            'local_media_prefix_path': self._local_media_prefix_path,
             'cd_mount_prefix_path': self._cd_mount_prefix_path
         }
 
