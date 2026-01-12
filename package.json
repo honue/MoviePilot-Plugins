@@ -62,7 +62,7 @@
   "CleanLogs": {
     "name": "插件日志清理",
     "description": "定时清理插件产生的日志",
-    "version": "1.1",
+    "version": "1.2",
     "v2": true,
     "history": {
       "v1.1": "t佬看不下去了，决定亲自出手",

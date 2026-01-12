@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import re
 
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -25,7 +26,7 @@ class CleanLogs(_PluginBase):
     # 插件图标
     plugin_icon = "clean.png"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -93,8 +94,23 @@ class CleanLogs(_PluginBase):
             for plugin in local_plugins:
                 clean_plugin.append(plugin.id)
 
+        log_dir = settings.LOG_PATH / Path("plugins")
         for plugin_id in clean_plugin:
-            log_path = settings.LOG_PATH / Path("plugins") / f"{plugin_id.lower()}.log"
+            log_name = f"{plugin_id.lower()}.log"
+            log_path = log_dir / log_name
+
+            deleted_rotated = 0
+            for rotated in log_dir.glob(f"{log_name}.*"):
+                if re.search(r"\.log\.\d+$", rotated.name):
+                    try:
+                        rotated.unlink()
+                        deleted_rotated += 1
+                    except Exception as err:
+                        logger.error(f"删除日志文件失败: {rotated}: {err}")
+
+            if deleted_rotated > 0:
+                logger.info(f"已删除 {plugin_id} 轮替日志文件 {deleted_rotated} 个")
+
             if not log_path.exists():
                 logger.debug(f"{plugin_id} 日志文件不存在")
                 continue
@@ -109,9 +125,10 @@ class CleanLogs(_PluginBase):
 
             with open(log_path, 'w', encoding='utf-8') as file:
                 file.writelines(top_lines)
-
+            
             if (len(lines) - self._rows) > 0:
                 logger.info(f"已清理 {plugin_id} {len(lines) - self._rows} 行日志")
+
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         # 已安装插件
