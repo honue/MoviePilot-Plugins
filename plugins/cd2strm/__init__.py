@@ -34,7 +34,7 @@ class Cd2Strm(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.1"
+    plugin_version = "0.0.2"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -127,16 +127,15 @@ class Cd2Strm(_PluginBase):
         with lock:
             for target_file in transfer_info.file_list_new:
                 history: TransferHistory = self._history_oper.get_by_dest(dest=target_file)
+                logger.info(history.src)
                 if isCloudFile:
                     logger.info(f"整理的是网盘文件 {history.src} ，不加入上传列表")
-                    logger.info(f"删除本地媒体库文件 {history.dest}")
                     self.del_dest_file(history.id)
-                    logger.info(f"创建Strm文件")
                     self.create_strm_task(history.id)
                     return
                 else:
                     waiting_upload_list_id = self.get_data(self._data_key_waiting_upload) or []
-                    waiting_upload_list_id = waiting_upload_list_id + history.id
+                    waiting_upload_list_id = waiting_upload_list_id.append(history.id)
                     # 去重
                     waiting_upload_list_id = list(dict.fromkeys(waiting_upload_list_id))
                     self.save_data(self._data_key_waiting_upload, waiting_upload_list_id)
