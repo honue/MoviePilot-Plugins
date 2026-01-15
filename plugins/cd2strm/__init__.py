@@ -34,7 +34,7 @@ class Cd2Strm(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/clouddrive.png"
     # 插件版本
-    plugin_version = "0.0.3"
+    plugin_version = "0.0.4"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -118,7 +118,7 @@ class Cd2Strm(_PluginBase):
     @eventmanager.register(EventType.TransferComplete)
     def update_waiting_upload_list(self, event: Event):
         transfer_info: TransferInfo = event.event_data.get('transferinfo', {})
-        logger.info(f"监测到整理剧集：{transfer_info.file_list}\n")
+        logger.info(f"监测到整理剧集：{transfer_info.file_list}")
         if not transfer_info.file_list_new:
             return
         # 判断是不是网盘整理的剧,网盘剧跳过
@@ -127,15 +127,19 @@ class Cd2Strm(_PluginBase):
             if self._cd_mount_prefix_path in source_file:
                 isCloudFile = True
         with lock:
-            for target_file in transfer_info.file_list_new:
-                history: TransferHistory = self._history_oper.get_by_dest(dest=target_file)
+            waiting_upload_list_id = self.get_data(self._data_key_waiting_upload) or []
+            uploaded_id_list = self.get_data(self._data_key_uploaded) or []
+            new_waiting_ids = []
+            new_waiting_sources = []
+            for source_file in transfer_info.file_list:
+                history: TransferHistory = self._history_oper.get_by_src(src=source_file)
                 if isCloudFile:
                     logger.info(f"整理的是网盘文件 {history.src} ，不加入上传列表")
                     self.del_dest_file(history.id)
                     self.create_strm_task(history.id)
                     return
                 else:
-                    # 判断段转移任务开始时间 新剧晚点上传 老剧立马上传
+                    # 判断段转移任务开始时间?新剧晚点上传 老剧立马上上传
                     media_info: MediaInfo = event.event_data.get('mediainfo', {})
                     meta: MetaBase = event.event_data.get("meta")
 
@@ -143,21 +147,14 @@ class Cd2Strm(_PluginBase):
                         is_exist = self._subscribe_oper.exists(tmdbid=media_info.tmdb_id, doubanid=media_info.douban_id,
                                                                season=media_info.season)
                         if is_exist:
-                            logger.info(f'追更剧集,{self._cron}分钟后开始执行上传任务...')
+                            logger.info(f'追更剧集,{self._cron}分钟后开始执行上传任务..')
                             try:
-                                waiting_upload_list_id = self.get_data(self._data_key_waiting_upload) or []
-                                waiting_upload_list_id.append(history.id)
-                                # 去重
-                                waiting_upload_list_id = list(dict.fromkeys(waiting_upload_list_id))
-                                self.save_data(self._data_key_waiting_upload, waiting_upload_list_id)
-                                logger.info(f'新入库文件，加入待上传列表 {transfer_info.file_list_new}')
-
-                                self._scheduler.add_job(func=self.upload_task, trigger='date',
-                                                        kwargs={"media_info": media_info, "meta": meta},
-                                                        run_date=datetime.now(
-                                                            tz=pytz.timezone(settings.TZ)) + timedelta(
-                                                            minutes=self._cron),
-                                                        name="cd2上传任务")
+                                if history.id in waiting_upload_list_id or history.id in uploaded_id_list:
+                                    continue
+                                if history.id in new_waiting_ids:
+                                    continue
+                                new_waiting_ids.append(history.id)
+                                new_waiting_sources.append(history.src)
                             except Exception as err:
                                 logger.error(f"定时任务配置错误：{str(err)}")
                         else:
@@ -169,49 +166,70 @@ class Cd2Strm(_PluginBase):
                                                         seconds=5),
                                                     name="cd2上传任务")
 
-                        self._scheduler.start()
+            if new_waiting_ids:
+                waiting_upload_list_id.extend(new_waiting_ids)
+                # 去重
+                waiting_upload_list_id = list(dict.fromkeys(waiting_upload_list_id))
+                self.save_data(self._data_key_waiting_upload, waiting_upload_list_id)
+                logger.info(f'新入库文件，加入待上传列表{new_waiting_sources}')
+
+                self._scheduler.add_job(func=self.upload_task, trigger='date',
+                                        run_date=datetime.now(
+                                            tz=pytz.timezone(settings.TZ)) + timedelta(
+                                            minutes=self._cron),
+                                        name="cd2上传任务")
+
+            self._scheduler.start()
 
     def upload_task(self, immediately_id: int = None):
-        if immediately_id:
-            # 链接目录前缀 替换为 cd2挂载前缀
-            history: TransferHistory = self._history_oper.get(immediately_id)
-            cd2_dest = history.dest.replace(self._local_media_prefix_path, self._cd_mount_prefix_path)
-            if self._upload_file(local_source=history.src, cd2_dest=cd2_dest):
-                logger.info(f'上传成功 {history.src} {cd2_dest}')
-                self.del_dest_file(history.id)
-                self.create_strm_task(history.id)
-            else:
-                logger.error(f'上传失败 {history.src} {cd2_dest}')
-            return
-        with lock:
-            waiting_upload_id_list = self.get_data(self._data_key_waiting_upload) or []
-            uploaded_id_list = self.get_data(self._data_key_uploaded) or []
-            if not waiting_upload_id_list:
-                logger.info('没有需要上传的媒体文件')
-                return
-            logger.info(f'开始执行上传任务 转移记录：{waiting_upload_id_list} ')
-            task_list = waiting_upload_id_list.copy()
-            total_num = len(waiting_upload_id_list)
-            for id in waiting_upload_id_list:
+        try:
+            if immediately_id:
                 # 链接目录前缀 替换为 cd2挂载前缀
-                history: TransferHistory = self._history_oper.get(id)
+                history: TransferHistory = self._history_oper.get(immediately_id)
                 cd2_dest = history.dest.replace(self._local_media_prefix_path, self._cd_mount_prefix_path)
                 if self._upload_file(local_source=history.src, cd2_dest=cd2_dest):
-                    task_list.remove(id)
-                    uploaded_id_list.append(id)
-                    logger.info(f'【{total_num - len(task_list)}/{total_num}】 上传成功 {history.src} {cd2_dest}')
+                    logger.info(f'上传成功 {history.src} {cd2_dest}')
+                    self.del_dest_file(history.id)
+                    self.create_strm_task(history.id)
                 else:
                     logger.error(f'上传失败 {history.src} {cd2_dest}')
-                    continue
-            logger.info("上传完毕")
+                return
+            with lock:
+                waiting_upload_id_list = self.get_data(self._data_key_waiting_upload) or []
+                uploaded_id_list = self.get_data(self._data_key_uploaded) or []
+                if not waiting_upload_id_list:
+                    logger.info('没有需要上传的媒体文件')
+                    return
+                logger.info(f'开始执行上传任务 转移记录：{waiting_upload_id_list} ')
+                task_list = waiting_upload_id_list.copy()
+                total_num = len(waiting_upload_id_list)
+                for id in waiting_upload_id_list:
+                    # 链接目录前缀 替换为 cd2挂载前缀
+                    history: TransferHistory = self._history_oper.get(id)
+                    if history is None:
+                        logger.error(f"{id} 转移记录不存在")
+                        task_list.remove(id)
+                        continue
+                    cd2_dest = history.dest.replace(self._local_media_prefix_path, self._cd_mount_prefix_path)
+                    if self._upload_file(local_source=history.src, cd2_dest=cd2_dest):
+                        task_list.remove(id)
+                        uploaded_id_list.append(id)
+                        logger.info(f'【{total_num - len(task_list)}/{total_num}】 上传成功 {history.src} {cd2_dest}')
+                    else:
+                        logger.error(f'上传失败 {history.src} {cd2_dest}')
+                        continue
+                logger.info("上传完毕")
 
-            task_list = list(dict.fromkeys(task_list))
-            uploaded_id_list = list(dict.fromkeys(uploaded_id_list))
+                task_list = list(dict.fromkeys(task_list))
+                uploaded_id_list = list(dict.fromkeys(uploaded_id_list))
 
-            logger.info(f"待创建Strm：{[self._history_oper.get(i).src for i in uploaded_id_list]}")
+                logger.info(f"待创建Strm：{[self._history_oper.get(i).src for i in uploaded_id_list]}")
 
-            self.save_data(self._data_key_waiting_upload, task_list)
-            self.save_data(self._data_key_uploaded, uploaded_id_list)
+                self.save_data(self._data_key_waiting_upload, task_list)
+                self.save_data(self._data_key_uploaded, uploaded_id_list)
+        except Exception as e:
+            logger.error(e)
+
 
     def _upload_file(self, local_source: str = None, cd2_dest: str = None) -> bool:
         logger.info('')
@@ -238,18 +256,15 @@ class Cd2Strm(_PluginBase):
             return False
 
     def del_dest_create_strm_task(self, now_delete: bool = False):
-        logger.info('')
+        logger.info("定时任务,检查是否需要 删除本地媒体文件，创建Strm\n")
         with lock:
             try:
                 uploaded_id_list = self.get_data(self._data_key_uploaded) or []
                 temp_list = uploaded_id_list.copy()
                 for id in temp_list:
                     history: TransferHistory = self._history_oper.get(id)
-                    history_date = datetime.strptime(history.date, "%Y-%m-%d %H:%M:%S")
-                    if (datetime.now() - history_date).total_seconds() > self._save_days * 86400:
-                        logger.info(f"{history.dest} 超过 {self._save_days} 天, 开始删除本地媒体文件，创建Strm")
-                        self.del_dest_file(id)
-                        self.create_strm_task(id)
+                    if history is None:
+                        logger.error(f"{id} 转移记录不存在")
                         uploaded_id_list.remove(id)
                         continue
                     if now_delete:
@@ -257,6 +272,16 @@ class Cd2Strm(_PluginBase):
                         self.del_dest_file(id)
                         self.create_strm_task(id)
                         uploaded_id_list.remove(id)
+                        continue
+                    history_date = datetime.strptime(history.date, "%Y-%m-%d %H:%M:%S")
+                    if (datetime.now() - history_date).total_seconds() > self._save_days * 86400:
+                        logger.info(f"{history.dest} 超过 {self._save_days} 天, 开始删除本地媒体文件，创建Strm")
+                        self.del_dest_file(id)
+                        self.create_strm_task(id)
+                        uploaded_id_list.remove(id)
+                        continue
+                    else:
+                        logger.info(f"{history.dest} 整理时间：{history_date}，未过期，跳过")
                 self.save_data(self._data_key_uploaded, uploaded_id_list)
             except Exception as err:
                 logger.error(err)
@@ -288,7 +313,7 @@ class Cd2Strm(_PluginBase):
         try:
             with open(strm_file_path, "w") as strm_file:
                 strm_file.write(cd2_dest)
-            logger.info(f"生成strm文件 {strm_file_path} <- 写入 {cd2_dest} ")
+            logger.info(f"生成strm文件 {strm_file_path} <- 写入 {cd2_dest} \n")
         except OSError as e:
             logger.error(f"写入 STRM 文件失败: {e}")
 
@@ -314,7 +339,7 @@ class Cd2Strm(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -330,7 +355,7 @@ class Cd2Strm(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 3
                                 },
                                 'content': [
                                     {
@@ -345,14 +370,14 @@ class Cd2Strm(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 4
+                                    'md': 6
                                 },
                                 'content': [
                                     {
                                         'component': 'VSwitch',
                                         'props': {
                                             'model': 'cleanlocal',
-                                            'label': '立即清理本地媒体文件，生成Strm',
+                                            'label': '立即清理追更媒体文件，生成Strm',
                                         }
                                     }
                                 ]
