@@ -138,7 +138,7 @@
   "DoubanTvComing": {
     "name": "豆瓣即将播出订阅",
     "description": "豆瓣即将播出剧集，想看人数超过阈值后自动添加订阅。",
-    "version": "1.0",
+    "version": "1.1",
     "v2": true,
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/douban.png",
     "author": "honue",

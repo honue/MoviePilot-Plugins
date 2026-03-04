@@ -25,7 +25,7 @@ class DoubanTvComing(_PluginBase):
     plugin_name = "豆瓣即将播出订阅"
     plugin_desc = "豆瓣即将播出剧集，想看人数，超过阈值后自动添加订阅。"
     plugin_icon = "douban.png"
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     plugin_author = "honue"
     author_url = "https://github.com/honue"
     plugin_config_prefix = "doubantvcoming_"
@@ -38,7 +38,7 @@ class DoubanTvComing(_PluginBase):
     _scheduler = None
 
     _enabled = False
-    _cron = ""
+    _cron = "5 18 * * *"
     _onlyonce = False
     _clear = False
     _clearflag = False
@@ -46,7 +46,7 @@ class DoubanTvComing(_PluginBase):
     _rss_domain = "https://rsshub.ddsrem.com/"
     _rss_path = "/douban/tv/coming"
     _rss_url = "https://rsshub.ddsrem.com/douban/tv/coming"
-    _air_date_within_days = 7
+    _air_date_within_days = 3
     _min_wish = 5000
     _region_filters: List[str] = []
     _genre_filters: List[str] = []
@@ -66,14 +66,14 @@ class DoubanTvComing(_PluginBase):
 
         config = config or {}
         self._enabled = config.get("enabled", False)
-        self._cron = config.get("cron") or ""
+        self._cron = config.get("cron") or "5 18 * * *"
         self._proxy = config.get("proxy", False)
         self._onlyonce = config.get("onlyonce", False)
         self._clear = config.get("clear", False)
         self._rss_domain = self.__normalize_rss_domain(config.get("rss_domain") or "https://rsshub.app")
         self._rss_url = self.__build_rss_url(self._rss_domain)
         self._min_wish = int(config.get("min_wish", 5000) or 5000)
-        self._air_date_within_days = int(config.get("air_date_within_days", 7) or 7)
+        self._air_date_within_days = int(config.get("air_date_within_days", 3) or 3)
         self._region_filters = config.get("region_filters") or []
         self._genre_filters = config.get("genre_filters") or []
 
@@ -550,9 +550,9 @@ class DoubanTvComing(_PluginBase):
                 mtype=NotificationType.Subscribe,
                 title=f"{mediainfo.title_year} Season {meta.begin_season if meta.begin_season else '1'} 已添加订阅",
                 text=(
-                    f"{rss_description or mediainfo.overview or '暂无简介'}\n"
+                    f"播出时间：{tmdb_air_date}，{rss_description or mediainfo.overview or '暂无简介'}\n"
                     f"豆瓣链接：{self.__build_douban_dispatch_link(link)}\n\n"
-                    f"[{self.plugin_name}]"
+                    f"[{self.plugin_name}]\n"
                 ),
                 image=mediainfo.get_message_image(),
                 link=settings.MP_DOMAIN("#/subscribe/tv?tab=mysub")
