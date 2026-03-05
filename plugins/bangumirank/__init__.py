@@ -2,6 +2,7 @@ import datetime
 import xml.dom.minidom
 from threading import Event
 from typing import Tuple, List, Dict, Any
+from urllib.parse import urlparse
 
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -28,7 +29,7 @@ class BangumiRank(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/miku.jpg"
     # 插件版本
-    plugin_version = "1.5"
+    plugin_version = "1.6"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -56,6 +57,7 @@ class BangumiRank(_PluginBase):
     _rank_top = None
     _uid = None
     _wish_top = None
+    _rss_base_url = "https://rsshub.ddsrem.com/"
 
     def init_plugin(self, config: dict = None):
         self.downloadchain = DownloadChain()
@@ -76,6 +78,10 @@ class BangumiRank(_PluginBase):
             # 订阅筛选
             self._include = config.get("include")
             self._exclude = config.get("exclude")
+            # RSSHub基础地址
+            self._rss_base_url = self.__normalize_rss_base_url(
+                config.get("rss_base_url") or "https://rsshub.ddsrem.com/"
+            )
 
         # 停止现有任务
         self.stop_service()
@@ -194,6 +200,27 @@ class BangumiRank(_PluginBase):
                                         'props': {
                                             'model': 'clear',
                                             'label': '清理历史记录',
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'rss_base_url',
+                                            'label': 'RSSHub Base URL',
+                                            'placeholder': 'https://rsshub.ddsrem.com/'
                                         }
                                     }
                                 ]
@@ -350,7 +377,8 @@ class BangumiRank(_PluginBase):
             "rank_top": 0,
             "clear": False,
             "include": "",
-            "exclude": ""
+            "exclude": "",
+            "rss_base_url": "https://rsshub.ddsrem.com/"
         }
 
     def get_page(self) -> List[dict]:
@@ -485,7 +513,8 @@ class BangumiRank(_PluginBase):
             "wish_top": self._wish_top,
             "rank_top": self._rank_top,
             "include": self._include,
-            "exclude": self._exclude
+            "exclude": self._exclude,
+            "rss_base_url": self._rss_base_url
         })
 
     def __refresh_rss(self):
@@ -493,14 +522,17 @@ class BangumiRank(_PluginBase):
         刷新RSS
         """
         addr_list = []
+        rss_base_url = self.__normalize_rss_base_url(self._rss_base_url)
 
         if self._uid and self._wish_top:
-            addr_list.append(f"https://rsshub.app/bangumi.tv/user/collections/{self._uid}/2/1?limit={self._wish_top}")
+            addr_list.append(
+                f"{rss_base_url}/bangumi.tv/user/collections/{self._uid}/2/1?limit={self._wish_top}"
+            )
         else:
             logger.info(f"未设置username或wish_top，不执行想看订阅")
 
         if self._rank_top:
-            addr_list.append(f"http://rsshub.app/bangumi.tv/anime/followrank?limit={self._rank_top}")
+            addr_list.append(f"{rss_base_url}/bangumi.tv/anime/followrank?limit={self._rank_top}")
         else:
             logger.info(f"未设置rank_top，不执行榜单订阅")
 
@@ -631,3 +663,15 @@ class BangumiRank(_PluginBase):
         except Exception as e:
             logger.error("获取RSS失败：" + str(e))
             return []
+
+    @staticmethod
+    def __normalize_rss_base_url(raw_url: str) -> str:
+        url = (raw_url or "").strip()
+        if not url:
+            return "https://rsshub.ddsrem.com"
+        if "://" not in url:
+            url = f"https://{url}"
+        parsed = urlparse(url)
+        netloc = parsed.netloc or parsed.path
+        scheme = parsed.scheme or "https"
+        return f"{scheme}://{netloc}".rstrip("/")
