@@ -94,12 +94,13 @@
   "BangumiSync": {
     "name": "Bangumi打格子",
     "description": "将你在媒体库上的番剧观看，同步到Bangumi在看状态",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "v2": true,
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg",
     "author": "honue,happyTonakai",
     "level": 1,
     "history": {
+      "v2.0.2": "提升媒体匹配准确性",
       "v2.0.1": "修复首次处理未收藏条目失败的问题",
       "v2.0.0": "支持动画电影, 增加异常通知",
       "v1.9.2": "修复某些情况下错误判断为最终话",

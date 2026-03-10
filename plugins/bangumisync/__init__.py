@@ -1,5 +1,4 @@
 import contextvars
-import re
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -17,11 +16,12 @@ from app.core.metainfo import MetaInfoPath
 from app.db.models.mediaserver import MediaServerItem
 from app.log import logger
 from app.plugins import _PluginBase
-from app.schemas import WebhookEventInfo
+from app.schemas import WebhookEventInfo, TmdbEpisode
 from app.schemas.exception import ImmediateException
 from app.schemas.types import EventType, MediaType, NotificationType
 from app.utils.common import retry
 from app.utils.http import RequestUtils
+from app.utils.string import StringUtils
 
 
 # 为每个上下文维护独立的状态
@@ -109,7 +109,7 @@ class BangumiAPIClient:
         """
         return self.__invoke("get", self._urls["myself"], key="username")
 
-    def search(self, title: str, air_date: str) -> List[dict]:
+    def search(self, title: str, air_date: Optional[str] = None) -> List[dict]:
         """
         搜索媒体信息
         """
@@ -192,7 +192,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "2.0.1"
+    plugin_version = "2.0.2"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
@@ -205,11 +205,6 @@ class BangumiSync(_PluginBase):
     auth_level = 1
 
     UA = "honue/MoviePilot-Plugins (https://github.com/honue/MoviePilot-Plugins)"
-
-    ANIME_KEYWORDS_PATTERN = re.compile(
-        r"(日番|cartoon|动漫|动画|ani|anime|新番|番剧|特摄|bangumi|ova|映画|国漫|日漫)",
-        re.IGNORECASE,
-    )
 
     _enable: bool = False
     _user: str = ""
@@ -242,39 +237,29 @@ class BangumiSync(_PluginBase):
             if not (event_info.event in play_start or event_info.percentage and event_info.percentage > 90):
                 logger.info(f"{event_info.item_name} 播放进度不足90%, 不处理")
                 return
-            # 根据路径判断是不是番剧
-            if not BangumiSync.is_anime(event_info):
-                return
 
-            title = None
-            air_date = None
-            epinfo = None
             logger.info(f"匹配播放事件 {event_info.item_name} ...")
             # 解析事件元数据
             meta = self.parse_event_meta(event_info)
             # 获取媒体信息
             mediainfo = self.chain.recognize_media(meta)
             if not mediainfo:
-                title = meta.name
+                logger.debug(f"未识别到媒体信息: {event_info.item_name}, 不处理")
+                return
+            if 16 not in mediainfo.genre_ids:
+                # 不是动漫, 不处理
+                logger.info(f"{event_info.item_name} 不是动漫, 不处理")
+                return
+
+            # 匹配 Bangumi 条目
+            if mediainfo.type == MediaType.TV:
+                result = self._match_tv_subject(mediainfo, meta, event_info.tmdb_id)
             else:
-                # 使用源语言标题
-                title = mediainfo.original_title
+                result = self._match_movie_subject(mediainfo)
 
-                if mediainfo.type == MediaType.TV:
-                    air_date, epinfo = self.__lookup_episode(season=meta.begin_season, episode=meta.begin_episode,
-                                                             mediainfo=mediainfo, unique_id=event_info.tmdb_id)
+            # 同步条目状态
+            self.sync_subject_status(*result)
 
-                if air_date is None:
-                    air_date = self._season_air_date(mediainfo=mediainfo, season=meta.begin_season)
-
-            # 匹配Bangumi 条目
-            subject_id = self.get_subjectid(title=title, air_date=air_date, type=meta.type)
-
-            if meta.type == MediaType.MOVIE:
-                # 电影直接更新状态
-                self.update_collection_status(subject_id, 2)
-            else:
-                self.sync_tv_status(subject_id, meta.begin_episode, epinfo)
         except Exception as e:
             err_msg = f"{self._prefix} 同步失败:\n {str(e)}"
             logger.error(err_msg)
@@ -286,8 +271,276 @@ class BangumiSync(_PluginBase):
                     image=mediainfo.get_message_image() if mediainfo else None,
                 )
 
+    def _match_tv_subject(self, mediainfo: MediaInfo, meta: MetaBase, unique_id) -> tuple:
+        """
+        匹配Bangumi TV条目
+
+        :param mediainfo: 媒体信息
+        :param meta: 元数据信息
+        :param unique_id: 唯一ID
+        :return tuple: (subject_id, episode_id, mark_as_watched)
+        :raises ImmediateException: 当找不到匹配项时抛出异常
+        """
+        ep_num = meta.begin_episode
+        # 先获取tmdb集信息
+        tmdb_episodes = self.get_original_language_tmdb_episodes(
+            mediainfo=mediainfo,
+            season=meta.begin_season
+        )
+
+        # 通过tmdb获取播出日期和剧集信息
+        air_date, epinfo = self.__lookup_episode(
+            episodes=tmdb_episodes,
+            ep_num=ep_num,
+            unique_id=unique_id
+        )
+        air_date = air_date or self._season_air_date(mediainfo=mediainfo, season=meta.begin_season)
+        # 获取Bangumi 条目
+        logger.info(f"{self._prefix}: 正在搜索 Bangumi 对应条目...")
+        resp = self.bangumi_client.search(
+            title=mediainfo.original_title,
+            air_date=air_date
+        )
+
+        if not resp:
+            # 未搜索到相关条目, 去掉播出日期再搜索一次
+            resp = self.bangumi_client.search(title=mediainfo.original_title)
+
+        if not resp:
+            raise ImmediateException("未找到对应的 Bangumi 条目")
+
+        logger.debug(f"{self._prefix}: 搜索结果: {resp}")
+
+        # 将tmdb的集信息提取
+        tmdb_episodes_info = [TmdbEpisode(**ep) for ep in tmdb_episodes]
+
+        for subject in resp:
+            if subject.get("platform") in {"剧场版", "电影"}:
+                continue
+
+            # 获取Bangumi集信息进一步确认
+            bangumi_episodes = self.get_bgm_episodes(subject_id=subject["id"])
+
+            # 验证TMDB与Bangumi集信息的匹配度
+            matched_episodes_count = self._validate_episode_matching(tmdb_episodes_info, bangumi_episodes)
+
+            # 如果匹配率超过70%，认为是正确的条目
+            if matched_episodes_count >= 0.7:
+                logger.info(f"{self._prefix}: 找到匹配的条目: {subject.get('name_cn', '')} "
+                        f"https://bgm.tv/subject/{subject['id']}")
+
+                # 匹配特定集数
+                found_episode_id, mark_as_watched = self._find_matching_episode(
+                    bangumi_episodes=bangumi_episodes,
+                    tmdb_episode_info=epinfo,
+                    ep_num=ep_num
+                )
+
+                if not found_episode_id:
+                    raise ImmediateException("未找到episode，可能因为TMDB和BGM的episode映射关系不一致")
+
+                # 记录匹配详情
+                logger.info(f"{self._prefix}: 匹配完成 - 找到episode ID: {found_episode_id}")
+                subject_id = subject["id"]
+                return subject_id, found_episode_id, mark_as_watched
+
+        raise ImmediateException("未能找到匹配的Bangumi条目")
+
+    def _match_movie_subject(self, mediainfo: MediaInfo) -> tuple:
+        """
+        匹配Bangumi 电影条目
+
+        :param mediainfo: 媒体信息
+        :return tuple: (subject_id, mark_as_watched)
+        :raise ImmediateException: 当找不到匹配项时抛出异常
+        """
+        resp = self.bangumi_client.search(
+            title=mediainfo.original_title,
+            air_date=mediainfo.release_date
+        )
+
+        if not resp:
+            # 未搜索到相关条目, 去掉播出日期再搜索一次
+            resp = self.bangumi_client.search(title=mediainfo.original_title)
+
+        if not resp:
+            raise ImmediateException("未找到对应的 Bangumi 条目")
+
+        logger.debug(f"{self._prefix}: 搜索结果: {resp}")
+
+        # 字段映射表
+        FIELD_MAPPING = {
+            '中文名': 'title',
+            '别名': 'names',
+            '上映年度': 'release_date',
+            '片长': 'duration',
+            '官方网站': 'website',
+            '导演': 'director',
+            '副导演': 'co_director',
+            '发售日期': 'release_date_digital'
+        }
+        release_date_timeamp = StringUtils.str_to_timestamp(mediainfo.release_date)
+
+        for subject in resp:
+            if subject.get("platform") not in {"剧场版", "电影"}:
+                continue
+
+            result = {}
+            for item in subject.get("infobox", []):
+                key = item.get("key")
+                value = item.get("value")
+
+                # 处理数组格式的值
+                if isinstance(value, list):
+                    if value and isinstance(value[0], dict) and "v" in value[0]:
+                        value = [v.get("v") for v in value if v.get("v")]
+
+                # 应用字段映射
+                mapped_key = FIELD_MAPPING.get(key, key.lower().replace(" ", "_"))
+                result[mapped_key] = value
+            # 获取两个可能的发行日期
+            release_dates = [
+                result.get("release_date"),
+                result.get("release_date_digital")
+            ]
+
+            # 检查任一日期是否在15天范围内
+            for release_date in release_dates:
+                if release_date and abs(
+                    release_date_timeamp - StringUtils.str_to_timestamp(release_date)
+                ) < 86400 * 15:
+                    return subject["id"], None, True
+
+        raise ImmediateException("未能找到匹配的Bangumi条目")
+
+    @staticmethod
+    def _validate_episode_matching(tmdb_episodes_info: List[TmdbEpisode],
+                                bangumi_episodes: List[dict]) -> float:
+        """
+        验证TMDB与Bangumi集信息的匹配度
+
+        :param tmdb_episodes_info: TMDB集信息列表
+        :param bangumi_episodes: Bangumi集信息列表
+        :return float: 匹配率
+        """
+        # 计算时间戳
+        future_limit = (datetime.now() + timedelta(days=5)).timestamp()
+
+        tmdb_episodes_info = [ep for ep in tmdb_episodes_info if ep.air_date and StringUtils.str_to_timestamp(ep.air_date) <= future_limit]
+
+        bangumi_episodes = [ep for ep in bangumi_episodes if (airdate := ep.get("airdate")) and StringUtils.str_to_timestamp(airdate) <= future_limit]
+
+        match_eps = set()
+
+        for tmdb_ep in tmdb_episodes_info:
+            tmdb_airdate_timestamp = StringUtils.str_to_timestamp(tmdb_ep.air_date)
+
+            for i, ep_info in enumerate(bangumi_episodes):
+                if i in match_eps:
+                    continue
+
+                score = 0
+                ep = ep_info.get("ep")
+                sort = ep_info.get("sort")
+                name = ep_info.get("name")
+                airdate = ep_info.get("airdate")
+
+                # 匹配集号
+                if tmdb_ep.episode_number == ep or tmdb_ep.episode_number == sort:
+                    score += 1
+                # 匹配名称
+                if tmdb_ep.name == name:
+                    score += 1
+                # 匹配播出日期（相差不超过一天）
+                if (airdate and
+                    abs(tmdb_airdate_timestamp - StringUtils.str_to_timestamp(airdate)) <= 86400):
+                    score += 1
+
+                if score >= 2:
+                    match_eps.add(i)
+                    break
+
+        return len(match_eps) / len(bangumi_episodes)
+
+    def _find_matching_episode(self, bangumi_episodes: List[dict],
+                            tmdb_episode_info: dict,
+                            ep_num: int) -> Tuple[Optional[int], bool]:
+        """
+        查找匹配的集信息
+
+        :param bangumi_episodes: Bangumi集信息列表
+        :param tmdb_episode_info: tmdb单集信息
+        :param ep_num: 集号
+        """
+        # 收集所有匹配项
+        candidates = []
+        episode_name = tmdb_episode_info.get("name")
+        airdate_timestamp = StringUtils.str_to_timestamp(tmdb_episode_info.get("air_date"))
+
+        for info in bangumi_episodes:
+            score = 0
+            matched_fields = {}
+
+            # 提取Bangumi集信息
+            name = info.get("name", "")
+            airdate = info.get("airdate")
+            sort = info.get("sort")
+            ep = info.get("ep")
+            episode_id = info.get("id")
+
+            # 名称匹配（权重4）
+            if episode_name and name == episode_name:
+                score += 4
+                matched_fields["name"] = name
+
+            # 播出日期匹配（权重4）
+            if (airdate and
+                abs(airdate_timestamp - StringUtils.str_to_timestamp(airdate)) < 86400):
+                score += 4
+                matched_fields["airdate"] = airdate
+
+            # sort字段匹配（权重3）
+            if sort == ep_num:
+                score += 3
+                matched_fields["sort"] = sort
+
+            # ep字段匹配（权重2）
+            if ep == ep_num:
+                score += 2
+                matched_fields["ep"] = ep
+
+            # 只有得分大于0的才考虑
+            if score > 0:
+                candidates.append({
+                    "info": info,
+                    "score": score,
+                    "matched_fields": matched_fields,
+                    "episode_id": episode_id
+                })
+
+        if candidates:
+            # 按得分排序，得分高的在前
+            candidates.sort(key=lambda x: x["score"], reverse=True)
+            # 选择得分最高的
+            best_candidate = candidates[0]
+
+            logger.info(f"{self._prefix}: 匹配完成 - 得分: {best_candidate['score']}, "
+                    f"匹配字段: {best_candidate['matched_fields']}")
+
+            found_episode_id = best_candidate["episode_id"]
+            # 判断是否是最后一集
+            mark_as_watched = (best_candidate["info"] == bangumi_episodes[-1])
+
+            return found_episode_id, mark_as_watched
+
+        return None, False
+
     def parse_event_meta(self, event_info: WebhookEventInfo) -> MetaBase:
-        meta = MetaInfoPath(Path(event_info.item_path))
+        meta = MetaInfoPath(
+            Path(event_info.item_path).parent / event_info.item_name
+            if event_info.item_path
+            else Path(event_info.item_name)
+        )
         meta.set_season(event_info.season_id)
         meta.set_episode(event_info.episode_id)
         meta.type = MediaType.MOVIE if event_info.media_type in ["Movie", "MOV"] else MediaType.TV
@@ -337,16 +590,51 @@ class BangumiSync(_PluginBase):
         meta.tmdbid = tmdb_id
         return meta
 
-    def __lookup_episode(self, season: int, episode: int, mediainfo: MediaInfo, unique_id) -> tuple[Optional[str], Any]:
+    def __lookup_episode(self, episodes: Optional[dict], ep_num: int, unique_id) -> tuple[Optional[str], Any]:
         """
         通过tmdb获取播出日期和剧集信息
 
-        :param season: 季号
-        :param episode: 集号
-        :param mediainfo: 媒体信息
+        :param episodes: TMDB的集信息
+        :param ep_num: 集号
         :param unique_id: 唯一标识
         """
-        episodes: list[dict] = None
+        if not episodes:
+            logger.warning(f"{self._prefix}: 没有剧集信息")
+            return None, None
+
+        if unique_id and not isinstance(unique_id, int):
+            try:
+                unique_id = int(unique_id)
+            except ValueError:
+                unique_id = None
+
+        # 初始化播出日期
+        air_date = None
+        matched_episode = None
+
+        for ep in episodes:
+            if air_date is None:
+                air_date = ep.get("air_date")
+            if self._uniqueid_match and unique_id:
+                if ep.get("id") == unique_id:
+                    matched_episode = ep
+                    break
+            elif ep.get("order", -99) + 1 == ep_num:
+                matched_episode = ep
+                break
+            elif ep.get("episode_number") == ep_num:
+                matched_episode = ep
+                break
+            if ep.get("episode_type") in ["finale", "mid_season"]:
+                air_date = None
+
+        if not matched_episode:
+            logger.warning(f"{self._prefix}: 未找到匹配的TMDB剧集")
+            air_date = None
+
+        return air_date, matched_episode
+
+    def get_original_language_tmdb_episodes(self, mediainfo: MediaInfo, season: int) -> list[dict]:
         language = mediainfo.original_language
 
         tmdb_obj = self.chain.modulemanager.get_running_module("TheMovieDbModule")
@@ -387,155 +675,17 @@ class BangumiSync(_PluginBase):
                 mediainfo.tmdb_id, mediainfo.type, season
             ) or _get_episodes_by_group(mediainfo.tmdb_id, season)
 
-        if result:
-            episodes = result.get("episodes")
+        return result.get("episodes", []) if isinstance(result, dict) else []
 
-        if not episodes:
-            logger.warning(f"{self._prefix}: 没有剧集信息")
-            return None, None
+    def sync_subject_status(self, subject_id: int, episode_id: Optional[int] = None, mark_as_watched: bool = False):
 
-        if unique_id and not isinstance(unique_id, int):
-            try:
-                unique_id = int(unique_id)
-            except ValueError:
-                unique_id = None
+        if episode_id:
+            self.update_collection_status(subject_id)
+            # 更新单集状态
+            self.update_episode_status(episode_id)
 
-        # 初始化播出日期
-        air_date = None
-        matched_episode = None
-
-        for ep in episodes:
-            if air_date is None:
-                air_date = ep.get("air_date")
-            if self._uniqueid_match and unique_id:
-                if ep.get("id") == unique_id:
-                    matched_episode = ep
-                    break
-            elif ep.get("order", -99) + 1 == episode:
-                matched_episode = ep
-                break
-            elif ep.get("episode_number") == episode:
-                matched_episode = ep
-                break
-            if ep.get("episode_type") in ["finale", "mid_season"]:
-                air_date = None
-
-        if not matched_episode:
-            logger.warning(f"{self._prefix}: 未找到匹配的TMDB剧集")
-            air_date = None
-
-        return air_date, matched_episode
-
-    def get_subjectid(self, title, air_date, type: MediaType) -> Optional[int]:
-        """
-        获取 bangumi 条目
-
-        :param title: 标题
-        :param air_date: 上映/首播日期
-        :param type: 媒体类型
-        """
-        logger.info(f"{self._prefix}: 正在搜索 Bangumi 对应条目...")
-
-        if resp := self.bangumi_client.search(title=title, air_date=air_date):
-            logger.debug(f"{self._prefix}: 搜索结果: {resp}")
-
-            for subject in resp:
-                mtype = MediaType.MOVIE if subject.get("platform") in {"剧场版", "电影"} else MediaType.TV
-                if mtype == type:
-                    subject_id = subject["id"]
-                    logger.info(f"{subject.get('name_cn', '')} https://bgm.tv/subject/{subject_id}")
-                    return subject_id
-
-        raise ImmediateException("未找到对应的 Bangumi 条目")
-
-    def sync_tv_status(self, subject_id, episode, tmdb_epinfo: dict):
-
-        # 更新合集状态
-        self.update_collection_status(subject_id)
-
-        # 获取episode id
-        ep_info = self.get_episodes_info(subject_id)
-
-        found_episode_id = None
-        if ep_info:
-            # 收集所有匹配项
-            candidates = []
-
-            episode_name = tmdb_epinfo.get("name") if tmdb_epinfo else None
-
-            episode_airdate = tmdb_epinfo.get("air_date") if tmdb_epinfo else None
-
-            if episode_airdate:
-                _air_date = datetime.strptime(episode_airdate, "%Y-%m-%d").date()
-                # 格式化为字符串
-                start_date = (_air_date - timedelta(days=1)).strftime("%Y-%m-%d")
-                end_date = (_air_date + timedelta(days=1)).strftime("%Y-%m-%d")
-
-            for info in ep_info:
-                score = 0
-                matched_fields = {}
-                # name
-                name = info.get("name", "")
-                # airdate
-                airdate = info.get("airdate")
-                # sort
-                sort = info.get("sort")
-                # ep
-                ep = info.get("ep")
-
-                # 名称匹配
-                if (episode_name and
-                    name == episode_name):
-                    score += 4
-                    matched_fields["name"] = name
-
-                # 播出日期匹配
-                if (episode_airdate and
-                    airdate and
-                    start_date <= airdate <= end_date):
-                    score += 4
-                    matched_fields["airdate"] = airdate
-
-                # sort字段匹配
-                if sort == episode:
-                    score += 3
-                    matched_fields["sort"] = sort
-
-                # ep字段匹配
-                if ep == episode:
-                    score += 2
-                    matched_fields["ep"] = ep
-
-                # 只有得分大于0的才考虑
-                if score > 0:
-                    candidates.append({
-                        "info": info,
-                        "score": score,
-                        "matched_fields": matched_fields
-                    })
-
-            if candidates:
-                # 按得分排序，得分高的在前
-                candidates.sort(key=lambda x: x["score"], reverse=True)
-                # 选择得分最高的
-                best_candidate = candidates[0]
-                found_episode_id = best_candidate["info"]["id"]
-                matched_info = best_candidate["info"]
-
-                # 记录匹配详情
-                logger.info(f"{self._prefix}: 匹配完成 - 得分: {best_candidate['score']}, "
-                            f"匹配字段: {best_candidate['matched_fields']}")
-
-        if not found_episode_id:
-            raise ImmediateException("未找到episode，可能因为TMDB和BGM的episode映射关系不一致")
-
-        last_episode = matched_info == ep_info[-1]
-
-        # 点格子
-        self.update_episode_status(found_episode_id)
-
-        # 最后一集，更新状态为看过
-        if last_episode:
+        # 更新条目状态为看过
+        if mark_as_watched:
             self.update_collection_status(subject_id, 2)
 
     def update_collection_status(self, subject_id, new_type=3):
@@ -557,7 +707,7 @@ class BangumiSync(_PluginBase):
         else:
             raise ImmediateException(f"合集状态 {type_dict[old_type]} => {type_dict[new_type]}，在看状态更新失败")
 
-    def get_episodes_info(self, subject_id) -> List[dict]:
+    def get_bgm_episodes(self, subject_id) -> List[dict]:
         all_episodes = []
         offset = 0
         # 使用最大 limit 减少请求次数
@@ -602,7 +752,7 @@ class BangumiSync(_PluginBase):
 
         :param mediainfo: 媒体信息
         :param season: 季号
-        :return: 播出日期，如果未找到则返回媒体的发布日期
+        :return str: 播出日期，如果未找到则返回媒体的发布日期
         """
         air_date = next(
             (
@@ -665,7 +815,7 @@ class BangumiSync(_PluginBase):
                 final_attr = attrs[-1]
                 old_value = getattr(current_obj, final_attr, None)
 
-                 # 如果当前值已经等于目标值，则跳过修改
+                # 如果当前值已经等于目标值，则跳过修改
                 if old_value == new_value:
                     logger.debug(f"Skip: {obj_name}.{attr_path} already equals {new_value}")
                     continue
@@ -708,24 +858,6 @@ class BangumiSync(_PluginBase):
                                  f"{str(e)}, force restore")
             # 恢复上下文
             _temp_attrs_state.reset(token)
-
-    @staticmethod
-    def is_anime(event_info: WebhookEventInfo) -> bool:
-        """
-        通过路径关键词来确定是不是anime媒体库
-        """
-        if event_info.channel in ["emby", "jellyfin"]:
-            path = event_info.item_path
-        elif event_info.channel == "plex":
-            path = event_info.json_object.get("Metadata", {}).get("librarySectionTitle", "")
-        else:
-            return False
-
-        if BangumiSync.ANIME_KEYWORDS_PATTERN.search(path):
-            return True
-
-        logger.debug(f"{path} 不是动漫媒体库")
-        return False
 
     @staticmethod
     def get_itemid(event_data: WebhookEventInfo) -> Optional[str]:
