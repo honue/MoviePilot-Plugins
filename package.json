@@ -144,5 +144,14 @@
     "icon": "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/douban.png",
     "author": "honue",
     "level": 2
+  },
+  "StrmTransfer": {
+    "name": "StrmTransfer",
+    "description": "媒体整理完成后，按路径前缀映射生成 STRM 文件",
+    "version": "1.0.0",
+    "v2": true,
+    "icon": "directory.png",
+    "author": "honue",
+    "level": 1
   }
 }
