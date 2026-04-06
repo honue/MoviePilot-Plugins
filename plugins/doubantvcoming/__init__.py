@@ -14,6 +14,7 @@ from app.chain.subscribe import SubscribeChain
 from app.core.config import settings
 from app.core.context import MediaInfo
 from app.core.metainfo import MetaInfo
+from app.db.site_oper import SiteOper
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas.types import MediaType, NotificationType
@@ -25,7 +26,7 @@ class DoubanTvComing(_PluginBase):
     plugin_name = "豆瓣即将播出订阅"
     plugin_desc = "豆瓣即将播出剧集，想看人数，超过阈值后自动添加订阅。"
     plugin_icon = "douban.png"
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     plugin_author = "honue"
     author_url = "https://github.com/honue"
     plugin_config_prefix = "doubantvcoming_"
@@ -48,6 +49,8 @@ class DoubanTvComing(_PluginBase):
     _rss_url = "https://rsshub.ddsrem.com/douban/tv/coming"
     _air_date_within_days = 3
     _min_wish = 5000
+    _resolution_filters: List[str] = []
+    _subscribe_sites: List[int] = []
     _region_filters: List[str] = []
     _genre_filters: List[str] = []
 
@@ -58,6 +61,11 @@ class DoubanTvComing(_PluginBase):
     _genre_options = [
         "爱情", "喜剧", "剧情", "悬疑", "古装", "动作", "犯罪", "科幻", "家庭", "奇幻", "武侠",
         "历史", "动画", "惊悚", "战争", "冒险", "恐怖", "灾难", "传记", "音乐", "歌舞"
+    ]
+    _resolution_options = [
+        {"title": "2160p / 4K", "value": "2160p|4k|uhd"},
+        {"title": "1080p", "value": "1080p"},
+        {"title": "720p", "value": "720p"},
     ]
 
     def init_plugin(self, config: dict = None):
@@ -74,6 +82,8 @@ class DoubanTvComing(_PluginBase):
         self._rss_url = self.__build_rss_url(self._rss_domain)
         self._min_wish = int(config.get("min_wish", 5000) or 5000)
         self._air_date_within_days = int(config.get("air_date_within_days", 3) or 3)
+        self._resolution_filters = config.get("resolution_filters") or []
+        self._subscribe_sites = config.get("subscribe_sites") or []
         self._region_filters = config.get("region_filters") or []
         self._genre_filters = config.get("genre_filters") or []
 
@@ -218,7 +228,9 @@ class DoubanTvComing(_PluginBase):
                                         "props": {
                                             "model": "rss_domain",
                                             "label": "RSSHub域名",
-                                            "placeholder": "https://rsshub.app"
+                                            "placeholder": "https://rsshub.app",
+                                            "hint": "rsshub官方的地址有cd盾",
+                                            "persistent-hint": True
                                         }
                                     }
                                 ]
@@ -302,6 +314,53 @@ class DoubanTvComing(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
+                                "props": {"cols": 12, "md": 6},
+                                "content": [
+                                    {
+                                        "component": "VSelect",
+                                        "props": {
+                                            "model": "subscribe_sites",
+                                            "label": "订阅站点",
+                                            "items": self.__get_site_options(),
+                                            "item-title": "title",
+                                            "item-value": "value",
+                                            "multiple": True,
+                                            "chips": True,
+                                            "clearable": True,
+                                            "hint": "可多选；不选时沿用系统默认订阅站点",
+                                            "persistent-hint": True
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6},
+                                "content": [
+                                    {
+                                        "component": "VSelect",
+                                        "props": {
+                                            "model": "resolution_filters",
+                                            "label": "默认订阅分辨率",
+                                            "items": self._resolution_options,
+                                            "item-title": "title",
+                                            "item-value": "value",
+                                            "multiple": True,
+                                            "chips": True,
+                                            "clearable": True,
+                                            "hint": "可多选，命中任一分辨率即可；不选时沿用系统默认",
+                                            "persistent-hint": True
+                                        }
+                                    }
+                                ]
+                            },
+                        ]
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
                                 "props": {"cols": 12},
                                 "content": [
                                     {
@@ -330,6 +389,8 @@ class DoubanTvComing(_PluginBase):
             "rss_domain": "https://rsshub.ddsrem.com",
             "min_wish": 5000,
             "air_date_within_days": 7,
+            "resolution_filters": [],
+            "subscribe_sites": [],
             "region_filters": [],
             "genre_filters": []
         }
@@ -451,6 +512,8 @@ class DoubanTvComing(_PluginBase):
             "rss_domain": self._rss_domain,
             "min_wish": self._min_wish,
             "air_date_within_days": self._air_date_within_days,
+            "resolution_filters": self._resolution_filters,
+            "subscribe_sites": self._subscribe_sites,
             "region_filters": self._region_filters,
             "genre_filters": self._genre_filters
         })
@@ -538,6 +601,8 @@ class DoubanTvComing(_PluginBase):
                 mtype=MediaType.TV,
                 tmdbid=mediainfo.tmdb_id,
                 season=meta.begin_season,
+                resolution=self.__build_resolution_rule(),
+                sites=self._subscribe_sites or None,
                 exist_ok=True,
                 username="豆瓣即将播出剧集",
                 message=False
@@ -671,6 +736,20 @@ class DoubanTvComing(_PluginBase):
 
     def __build_rss_url(self, domain: str) -> str:
         return f"{domain.rstrip('/')}{self._rss_path}"
+
+    @staticmethod
+    def __get_site_options() -> List[Dict[str, Any]]:
+        return [
+            {"title": site.name, "value": site.id}
+            for site in SiteOper().list_active()
+        ]
+
+    def __build_resolution_rule(self) -> Optional[str]:
+        if not self._resolution_filters:
+            return None
+        if len(self._resolution_filters) == 1:
+            return self._resolution_filters[0]
+        return "|".join([f"(?:{item})" for item in self._resolution_filters if item])
 
     def __get_tmdb_air_date(self, tmdb_id: Optional[int], season: Optional[int] = None) -> Optional[str]:
         if not tmdb_id:
