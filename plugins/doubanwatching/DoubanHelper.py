@@ -20,10 +20,12 @@ class DoubanHelper:
             cookie_dict, msg = self.cookiecloud.download()
             if cookie_dict is None:
                 logger.error(f"获取cookiecloud数据错误 {msg}")
-            self.cookies = cookie_dict.get("douban.com")
+                self.cookies = {}
+            else:
+                self.cookies = cookie_dict.get("douban.com")
         else:
             self.cookies = user_cookie
-        self.cookies = {k: v.value for k, v in SimpleCookie(self.cookies).items()}
+        self.cookies = {k: v.value for k, v in SimpleCookie(self.cookies).items()} if self.cookies else {}
 
         self.headers = {
             'User-Agent': settings.USER_AGENT,
@@ -37,13 +39,11 @@ class DoubanHelper:
 
         self.cookies.pop("__utmz", None)
 
-        # 移除用户传进来的comment-key
-        self.cookies.pop("ck", None)
-
-        # 获取最新的ck
-        self.set_ck()
-
         self.ck = self.cookies.get('ck')
+        if not self.ck:
+            # 仅在未提供ck时尝试刷新，避免覆盖用户配置中的有效ck
+            self.set_ck()
+            self.ck = self.cookies.get('ck')
         logger.debug(f"ck:{self.ck} cookie:{self.cookies}")
 
         if not self.cookies:
@@ -52,20 +52,30 @@ class DoubanHelper:
             logger.error(f"请求ck失败，请检查传入的cookie登录状态")
 
     def set_ck(self):
+        old_ck = self.cookies.get("ck")
         self.headers["Cookie"] = ";".join([f"{key}={value}" for key, value in self.cookies.items()])
-        response = requests.get("https://www.douban.com/", headers=self.headers)
+
+        try:
+            response = requests.get("https://www.douban.com/", headers=self.headers, timeout=10)
+        except Exception as e:
+            logger.error(f"请求豆瓣首页获取ck失败: {e}")
+            if old_ck:
+                self.cookies["ck"] = old_ck
+            return
+
         ck_str = response.headers.get('Set-Cookie', '')
         logger.debug(ck_str)
-        if not ck_str:
-            self.cookies['ck'] = ''
-            return
-        cookie_parts = ck_str.split(";")
-        ck = cookie_parts[0].split("=")[1].strip()
-        logger.debug(ck)
-        if ck == '"deleted"':
-            self.cookies['ck'] = ''
+
+        cookie = SimpleCookie()
+        cookie.load(ck_str)
+        ck_cookie = cookie.get("ck")
+        if ck_cookie and ck_cookie.value and ck_cookie.value != '"deleted"':
+            self.cookies['ck'] = ck_cookie.value
+            logger.debug(self.cookies['ck'])
+        elif old_ck:
+            self.cookies['ck'] = old_ck
         else:
-            self.cookies['ck'] = ck
+            self.cookies['ck'] = ''
 
     def get_subject_id(self, title: str = None, meta: MetaBase = None) -> Tuple | None:
         if not title:
@@ -128,23 +138,50 @@ class DoubanHelper:
         if private:
             data_json["private"] = "on"
         data_json["interest"] = status
-        response = requests.post(
-            url=f"https://movie.douban.com/j/subject/{subject_id}/interest",
-            headers=self.headers,
-            data=data_json)
-        if not response:
-            logger.error(response.text)
+
+        try:
+            response = requests.post(
+                url=f"https://movie.douban.com/j/subject/{subject_id}/interest",
+                headers=self.headers,
+                data=data_json,
+                timeout=10)
+        except Exception as e:
+            logger.error(f"同步豆瓣状态失败: {e}")
             return False
+
+        if response.status_code == 403:
+            logger.error(f"豆瓣返回403，尝试刷新ck后重试: {response.text}")
+            self.set_ck()
+            self.ck = self.cookies.get("ck")
+            self.headers["Cookie"] = ";".join([f"{key}={value}" for key, value in self.cookies.items()])
+            data_json["ck"] = self.ck
+            try:
+                response = requests.post(
+                    url=f"https://movie.douban.com/j/subject/{subject_id}/interest",
+                    headers=self.headers,
+                    data=data_json,
+                    timeout=10)
+            except Exception as e:
+                logger.error(f"刷新ck后重试失败: {e}")
+                return False
+
         if response.status_code == 200:
+            try:
+                ret = response.json().get("r")
+            except Exception:
+                logger.error(f"豆瓣响应解析失败: {response.text}")
+                return False
+
             # 正常情况 {"r":0}
-            ret = response.json().get("r")
-            r = False if (isinstance(ret, bool) and ret is False) else True
-            if r:
+            if ret == 0:
                 return True
             # 未开播 {"r": false}
-            else:
+            if isinstance(ret, bool) and ret is False:
                 logger.error(f"douban_id: {subject_id} 未开播")
                 return False
+
+            logger.error(response.text)
+            return False
         logger.error(response.text)
         return False
 
