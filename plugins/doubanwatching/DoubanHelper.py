@@ -15,6 +15,12 @@ from app.utils.http import RequestUtils
 class DoubanHelper:
 
     def __init__(self, user_cookie: str = None):
+        """
+        初始化豆瓣助手：
+        1. 从插件配置或 CookieCloud 获取 cookie
+        2. 组装请求头
+        3. 优先使用已有 ck；缺失时再尝试刷新
+        """
         if not user_cookie:
             self.cookiecloud = CookieCloudHelper()
             cookie_dict, msg = self.cookiecloud.download()
@@ -52,6 +58,11 @@ class DoubanHelper:
             logger.error(f"请求ck失败，请检查传入的cookie登录状态")
 
     def set_ck(self):
+        """
+        刷新 ck：
+        - 优先保留旧 ck，避免刷新失败导致登录态不可用
+        - 仅解析 Set-Cookie 中的 ck 字段，不依赖字段顺序
+        """
         old_ck = self.cookies.get("ck")
         self.headers["Cookie"] = ";".join([f"{key}={value}" for key, value in self.cookies.items()])
 
@@ -78,6 +89,10 @@ class DoubanHelper:
             self.cookies['ck'] = ''
 
     def get_subject_id(self, title: str = None, meta: MetaBase = None) -> Tuple | None:
+        """
+        根据标题查询豆瓣条目并返回 (匹配标题, subject_id)。
+        当前实现按搜索结果顺序返回首个命中项。
+        """
         if not title:
             title = meta.title
             year = meta.year
@@ -123,6 +138,12 @@ class DoubanHelper:
         return None, None
 
     def set_watching_status(self, subject_id: str, status: str = "do", private: bool = True) -> bool:
+        """
+        同步豆瓣观影状态：
+        - status: do(想看)/doing(在看)/done(看过)
+        - 首次返回 403 时刷新 ck 后重试一次
+        - 仅当响应 r == 0 视为成功
+        """
         self.headers["Referer"] = f"https://movie.douban.com/subject/{subject_id}/"
         self.headers["Origin"] = "https://movie.douban.com"
         self.headers["Host"] = "movie.douban.com"
@@ -150,6 +171,7 @@ class DoubanHelper:
             return False
 
         if response.status_code == 403:
+            # 豆瓣常见场景：ck 过期或风控导致拒绝，刷新后再重试一次
             logger.error(f"豆瓣返回403，尝试刷新ck后重试: {response.text}")
             self.set_ck()
             self.ck = self.cookies.get("ck")
