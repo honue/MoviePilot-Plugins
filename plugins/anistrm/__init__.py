@@ -18,7 +18,7 @@ class ANiStrm(_PluginBase):
     plugin_name = "ANiStrm"
     plugin_desc = "自动获取当季所有番剧，免去下载，轻松拥有一个番剧媒体库"
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/anistrm.png"
-    plugin_version = "2.5.1"
+    plugin_version = "2.6.0"
     plugin_author = "honue"
     author_url = "https://github.com/honue"
     plugin_config_prefix = "anistrm_"
@@ -119,11 +119,14 @@ class ANiStrm(_PluginBase):
             season_failed = 0
             logger.info(f"ANi-Strm开始处理季度：{season}，文件数={season_total}")
             for file_entry in file_entries:
+                # 将季度文件夹纳入本地目录结构，镜像网站目录层级
+                entry_relative_dir = file_entry.get("relative_dir") or ""
+                season_relative_dir = f"{season}/{entry_relative_dir}".strip("/")
                 status = self._strm_service.touch_strm_file(
                     storage_path=self._storageplace,
                     file_name=file_entry["name"],
                     file_url=file_entry["url"],
-                    relative_dir=file_entry.get("relative_dir"),
+                    relative_dir=season_relative_dir,
                 )
                 if status == "created":
                     season_created += 1
@@ -331,6 +334,7 @@ class ANiStrm(_PluginBase):
                                             "type": "info",
                                             "variant": "tonal",
                                             "text": "自动从open ANi抓取下载直链生成strm文件\n"
+                                            "本地目录结构镜像网站：存储路径/季度/番剧名/文件.strm\n"
                                             "默认选择最新季，也支持季度多选，自动补齐所选季度缺失的strm\n"
                                             "配合目录监控使用，strm文件创建在/downloads/strm\n"
                                             "通过目录监控转移到link媒体库文件夹 如/downloads/link/strm mp会完成刮削",
@@ -523,7 +527,13 @@ class AniStrmClient:
 
     def normalize_stream_link(self, link: str) -> str:
         parsed = urlparse(link)
-        if parsed.netloc not in {"resources.ani.rip", "openani.an-i.workers.dev"}:
+        # 兼容官方域名及各类镜像站域名
+        known_hosts = {
+            "resources.ani.rip",
+            "openani.an-i.workers.dev",
+            "ani.chengmo.cc.cd",
+        }
+        if parsed.netloc not in known_hosts and not parsed.netloc.endswith(".workers.dev"):
             return link
 
         proxy_parsed = urlparse(self._get_openani_base())
