@@ -192,7 +192,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "2.0.3"
+    plugin_version = "2.0.4"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
@@ -265,7 +265,7 @@ class BangumiSync(_PluginBase):
 
             # 匹配 Bangumi 条目
             if mediainfo.type == MediaType.TV:
-                result = self._match_tv_subject(mediainfo, meta, event_info.tmdb_id)
+                result = self._match_tv_subject(mediainfo, meta, self._get_episode_tmdb_id(event_info))
             else:
                 result = self._match_movie_subject(mediainfo)
 
@@ -306,6 +306,8 @@ class BangumiSync(_PluginBase):
             ep_num=ep_num,
             unique_id=unique_id
         )
+        if not epinfo:
+            raise ImmediateException("未找到对应的 TMDB 单集，请检查媒体库季集编号及单集 ID")
         air_date = air_date or self._season_air_date(mediainfo=mediainfo, season=meta.begin_season)
         # 获取Bangumi 条目
         logger.info(f"{self._prefix}: 正在搜索 Bangumi 对应条目...")
@@ -616,6 +618,19 @@ class BangumiSync(_PluginBase):
         else:
             meta.tmdbid = tmdb_id
         return meta
+
+    @staticmethod
+    def _get_episode_tmdb_id(event_info: WebhookEventInfo) -> Optional[str]:
+        if settings.VERSION_FLAG != "v3":
+            return event_info.tmdb_id
+        # V3 的统一事件 ID 是整部剧的身份；单集 ID 只能取原始单集载荷。
+        item = (event_info.json_object or {}).get("Item") or {}
+        if item.get("Type") == "Episode":
+            episode_id = (item.get("ProviderIds") or {}).get("Tmdb")
+            if episode_id and str(episode_id).isdigit():
+                return str(episode_id)
+        # 没有明确单集 ID 时使用季集编号，不能拿整部剧的 ID 去匹配单集。
+        return None
 
     @staticmethod
     def _get_tmdb_id(item) -> Optional[str]:

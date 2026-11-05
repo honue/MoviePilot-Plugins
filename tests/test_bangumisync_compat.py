@@ -13,7 +13,8 @@ def load_plugin(version="v3", **overrides):
     path = Path(__file__).resolve().parents[1] / "plugins/bangumisync/__init__.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "BangumiSync")
-    names = {"parse_event_meta", "_get_tmdb_id", "hook", "get_original_language_tmdb_episodes"}
+    names = {"parse_event_meta", "_get_tmdb_id", "hook", "get_original_language_tmdb_episodes",
+             "_get_episode_tmdb_id", "__lookup_episode", "_match_tv_subject"}
     cls.body = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in names]
     cls.bases = []
     for method in cls.body:
@@ -43,10 +44,52 @@ def load_plugin(version="v3", **overrides):
 def event(media_type="Episode"):
     return SimpleNamespace(item_path="", item_name="test", season_id=1, episode_id=2,
                            media_type=media_type, tmdb_id=999, server_name="emby",
-                           channel="emby", event="playback.start", percentage=0, user_name="user")
+                           channel="emby", event="playback.start", percentage=0, user_name="user",
+                           json_object={})
 
 
 class CompatibilityTests(unittest.TestCase):
+    def test_v3_episode_identity_uses_raw_provider_not_series_id(self):
+        plugin, _ = load_plugin()
+        info = event()
+        info.tmdb_id = '105248'
+        info.json_object = {'Item': {'Type': 'Episode', 'ProviderIds': {'Tmdb': '7900176'}}}
+        self.assertEqual(plugin._get_episode_tmdb_id(info), '7900176')
+        plugin._uniqueid_match = True
+        episodes = [{'id': 7900176, 'episode_number': 2, 'air_date': '2026-01-01'}]
+        _, matched = plugin._BangumiSync__lookup_episode(episodes, 2, plugin._get_episode_tmdb_id(info))
+        self.assertIs(matched, episodes[0])
+
+    def test_v3_without_raw_episode_id_uses_episode_number(self):
+        plugin, _ = load_plugin()
+        plugin._uniqueid_match = True
+        self.assertIsNone(plugin._get_episode_tmdb_id(event()))
+        episodes = [{'id': 123, 'episode_number': 2, 'air_date': '2026-01-01'}]
+        _, matched = plugin._BangumiSync__lookup_episode(episodes, 2, None)
+        self.assertIs(matched, episodes[0])
+
+    def test_v3_does_not_use_raw_series_provider_as_episode_id(self):
+        plugin, _ = load_plugin()
+        info = event()
+        info.json_object = {'Item': {'Type': 'Series', 'ProviderIds': {'Tmdb': '105248'}}}
+        self.assertIsNone(plugin._get_episode_tmdb_id(info))
+
+    def test_v2_keeps_event_episode_id(self):
+        plugin, _ = load_plugin('v2')
+        self.assertEqual(plugin._get_episode_tmdb_id(event()), 999)
+
+    def test_missing_tmdb_episode_stops_before_search_or_state_writes(self):
+        plugin, _ = load_plugin()
+        plugin._uniqueid_match = True
+        plugin._prefix = 'test'
+        plugin.get_original_language_tmdb_episodes = Mock(return_value=[])
+        plugin.bangumi_client = Mock()
+        plugin.sync_subject_status = Mock()
+        with self.assertRaisesRegex(RuntimeError, '未找到对应的 TMDB 单集'):
+            plugin._match_tv_subject(SimpleNamespace(), SimpleNamespace(begin_episode=2, begin_season=2), None)
+        plugin.bangumi_client.search.assert_not_called()
+        plugin.sync_subject_status.assert_not_called()
+
     def test_v2_uses_legacy_media_server_id(self):
         plugin, ns = load_plugin("v2")
         ns['MediaServerChain'].return_value.iteminfo.return_value = SimpleNamespace(tmdbid=123)
