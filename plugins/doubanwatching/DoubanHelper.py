@@ -21,6 +21,7 @@ class DoubanHelper:
         2. 组装请求头
         3. 优先使用已有 ck；缺失时再尝试刷新
         """
+        self.unavailable = False
         if not user_cookie:
             self.cookiecloud = CookieCloudHelper()
             cookie_dict, msg = self.cookiecloud.download()
@@ -53,6 +54,7 @@ class DoubanHelper:
         logger.debug(f"ck:{self.ck} cookie:{self.cookies}")
 
         if not self.cookies:
+            self.unavailable = True
             logger.error(f"cookie获取为空，请检查插件配置或cookie cloud")
         if not self.ck:
             logger.error(f"请求ck失败，请检查传入的cookie登录状态")
@@ -69,6 +71,7 @@ class DoubanHelper:
         try:
             response = requests.get("https://www.douban.com/", headers=self.headers, timeout=10)
         except Exception as e:
+            self.unavailable = True
             logger.error(f"请求豆瓣首页获取ck失败: {e}")
             if old_ck:
                 self.cookies["ck"] = old_ck
@@ -97,10 +100,22 @@ class DoubanHelper:
             title = meta.title
             year = meta.year
         url = f"https://www.douban.com/search?cat=1002&q={title}"
-        response = RequestUtils(headers=self.headers).get_res(url)
-        if not response.status_code == 200:
+        if self.unavailable:
+            return None, None
+        try:
+            response = RequestUtils(headers=self.headers).get_res(url)
+        except requests.RequestException:
+            self.unavailable = True
+            logger.error("搜索豆瓣连接异常，停止本轮补同步")
+            return None, None
+        if response is None:
+            self.unavailable = True
+            logger.error("搜索豆瓣无响应，停止本轮补同步")
+            return None, None
+        if response.status_code != 200:
+            self.unavailable = True
             logger.error(f"搜索 {title} 失败 状态码：{response.status_code}")
-            return None
+            return None, None
         # self.headers["Cookie"] = response.cookies
         soup = BeautifulSoup(response.text.encode('utf-8'), 'lxml')
         title_divs = soup.find_all("div", class_="title")
@@ -141,7 +156,7 @@ class DoubanHelper:
         """
         同步豆瓣观影状态：
         - status: do(想看)/doing(在看)/done(看过)
-        - 首次返回 403 时刷新 ck 后重试一次
+        - 403 或连接异常视为访问不可用，不在本轮继续重试
         - 仅当响应 r == 0 视为成功
         """
         self.headers["Referer"] = f"https://movie.douban.com/subject/{subject_id}/"
@@ -167,44 +182,36 @@ class DoubanHelper:
                 data=data_json,
                 timeout=10)
         except Exception as e:
+            self.unavailable = True
             logger.error(f"同步豆瓣状态失败: {e}")
             return False
 
-        if response.status_code == 403:
-            # 豆瓣常见场景：ck 过期或风控导致拒绝，刷新后再重试一次
-            logger.error(f"豆瓣返回403，尝试刷新ck后重试: {response.text}")
-            self.set_ck()
-            self.ck = self.cookies.get("ck")
-            self.headers["Cookie"] = ";".join([f"{key}={value}" for key, value in self.cookies.items()])
-            data_json["ck"] = self.ck
-            try:
-                response = requests.post(
-                    url=f"https://movie.douban.com/j/subject/{subject_id}/interest",
-                    headers=self.headers,
-                    data=data_json,
-                    timeout=10)
-            except Exception as e:
-                logger.error(f"刷新ck后重试失败: {e}")
-                return False
-
         if response.status_code == 200:
             try:
-                ret = response.json().get("r")
+                payload = response.json()
+                ret = payload.get("r")
             except Exception:
-                logger.error(f"豆瓣响应解析失败: {response.text}")
+                self.unavailable = True
+                logger.error("豆瓣响应不是有效 JSON，停止本轮补同步")
                 return False
 
-            # 正常情况 {"r":0}
-            if ret == 0:
-                return True
+            if str(payload.get("code")) in {"401", "403", "429"}:
+                self.unavailable = True
+                logger.error(f"豆瓣拒绝访问，错误码：{payload.get('code')}")
+                return False
             # 未开播 {"r": false}
             if isinstance(ret, bool) and ret is False:
                 logger.error(f"douban_id: {subject_id} 未开播")
                 return False
 
+            # False == 0，必须先排除布尔值，避免把条目失败误判为成功。
+            if ret == 0:
+                return True
+
             logger.error(response.text)
             return False
-        logger.error(response.text)
+        self.unavailable = True
+        logger.error(f"豆瓣请求失败，状态码：{response.status_code}，停止本轮补同步")
         return False
 
 

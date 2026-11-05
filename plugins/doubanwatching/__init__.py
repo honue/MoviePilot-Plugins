@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, List
 
 from app.chain.media import MediaChain
+from app.core.config import settings
 from app.core.event import eventmanager, Event
 from app.core.metainfo import MetaInfo
 from app.plugins import _PluginBase
@@ -23,7 +24,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.9.6"
+    plugin_version = "1.9.9"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -118,6 +119,7 @@ class DouBanWatching(_PluginBase):
 
         if episode_id < 2 and self._first:
             logger.info(f"剧集第1集的活动不同步到豆瓣档案，跳过")
+            self._retry_pending(processed_items)
             return
 
         meta = MetaInfo(title)
@@ -127,10 +129,10 @@ class DouBanWatching(_PluginBase):
 
         if not mediainfo:
             logger.warn(f'标题：{title}，tmdbid：{tmdb_id}，指定tmdbid未识别到媒体信息，尝试仅使用标题识别')
-            meta.tmdbid = None
             mediainfo = self._recognize_media(meta, None)
             if not mediainfo:
                 logger.error(f'仍然未识别到媒体信息，请检查TMDB网络连接...')
+                self._retry_pending(processed_items)
                 return
 
         episodes = mediainfo.seasons.get(season_id, [])
@@ -140,16 +142,12 @@ class DouBanWatching(_PluginBase):
 
         if processed_items.get(title) and len(episodes) != episode_id:
             logger.info(f"{title} 已同步到豆瓣在看，不处理")
+            self._retry_pending(processed_items)
             return
 
         sync_ret = self._sync_to_douban(title, status, event_info.item_type, processed_items, mediainfo.poster_path)
-        # 尝试同步之前同步失败的
-        if sync_ret:
-            logger.info(f"尝试同步之前同步失败的条目")
-            self._wait_process: Dict = self.get_data('wait') or {}
-            for key, value in self._wait_process.items():
-                logger.info(f"尝试同步: {key}")
-                self._sync_to_douban(key, value["status"], value["type"], processed_items, value["poster_path"])
+        if sync_ret is not None:
+            self._retry_pending(processed_items, exclude=title)
 
     def _process_movie(self, event_info: WebhookEventInfo, processed_items: Dict, played: bool = False):
         title = event_info.item_name
@@ -163,23 +161,50 @@ class DouBanWatching(_PluginBase):
 
         if not mediainfo:
             logger.warn(f'标题：{title}，tmdbid：{event_info.tmdb_id}，指定tmdbid未识别到媒体信息，尝试仅使用标题识别')
-            meta.tmdbid = None
             mediainfo = self._recognize_media(meta, None)
             if not mediainfo:
                 logger.error(f'仍然未识别到媒体信息，请检查TMDB网络连接...')
+                self._retry_pending(processed_items)
                 return
 
         if processed_items.get(title):
             logger.info(f"{title} 已同步到豆瓣在看，不处理")
+            self._retry_pending(processed_items)
             return
 
-        self._sync_to_douban(title, "collect", event_info.item_type, processed_items, mediainfo.poster_path)
+        sync_ret = self._sync_to_douban(title, "collect", event_info.item_type, processed_items, mediainfo.poster_path)
+        if sync_ret is not None:
+            self._retry_pending(processed_items, exclude=title)
+
+    def _retry_pending(self, processed_items: Dict, exclude: str = None):
+        self._wait_process = self.get_data('wait') or {}
+        # 同步成功会删除条目；当前事件已经尝试过的条目不在同一轮重复发送。
+        for title, value in list(self._wait_process.items()):
+            if title == exclude:
+                continue
+            logger.info(f"尝试同步: {title}")
+            result = self._sync_to_douban(title, value["status"], value["type"],
+                                          processed_items, value["poster_path"])
+            if result is None:
+                logger.warn("豆瓣访问不可用，停止本轮补同步，保留待同步条目")
+                break
 
     def _recognize_media(self, meta: MetaInfo, tmdb_id: Optional[int]) -> Optional[MediaInfo]:
-        return MediaChain().recognize_media(meta=meta, mtype=meta.type, tmdbid=tmdb_id, cache=True)
+        recognize = MediaChain().recognize_media
+        # 使用宿主版本标识选择 V2/V3 媒体识别接口。
+        if not tmdb_id:
+            # 识别过程可能回填媒体身份，按标题重试前需同时清除来源和 ID。
+            for attr in ("tmdbid", "media_source", "media_id"):
+                if hasattr(meta, attr):
+                    setattr(meta, attr, None)
+        if settings.VERSION_FLAG == "v3":
+            identity = {"media_source": "themoviedb", "media_id": str(tmdb_id)} if tmdb_id else {}
+            return recognize(meta=meta, mtype=meta.type, cache=True, **identity)
+        return recognize(meta=meta, mtype=meta.type, tmdbid=tmdb_id, cache=True)
 
     def _sync_to_douban(self, title: str, status: str, mediaType: str, processed_items: Dict,
-                        poster_path: str) -> bool:
+                        poster_path: str) -> Optional[bool]:
+        """返回 True 表示成功、False 表示条目失败、None 表示豆瓣访问不可用。"""
         logger.info(f"开始尝试获取 {title} 豆瓣id")
         douban_helper = DoubanHelper(user_cookie=self._cookie)
         subject_name, subject_id = douban_helper.get_subject_id(title=title)
@@ -218,7 +243,7 @@ class DouBanWatching(_PluginBase):
         else:
             logger.warn(f"获取 {title} subject_id 失败，本条目不存在于豆瓣，或请检查cookie")
 
-        return False
+        return None if douban_helper.unavailable else False
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """
