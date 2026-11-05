@@ -192,7 +192,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "2.0.2"
+    plugin_version = "2.0.3"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
@@ -226,9 +226,16 @@ class BangumiSync(_PluginBase):
         # 插件未启用
         if not self._enable:
             return
+        mediainfo = None
         try:
-            logger.debug(f"收到webhook事件: {event.event_data}")
             event_info: WebhookEventInfo = event.event_data
+            logger.debug(
+                f"收到webhook事件: source={str(event_info.channel)[:24]} "
+                f"event={str(event_info.event)[:40]} "
+                f"title={str(event_info.item_name).replace(chr(10), ' ')[:160]} "
+                f"season={event_info.season_id} episode={event_info.episode_id} "
+                f"progress={event_info.percentage}"
+            )
             # 不是指定用户, 不处理
             if event_info.user_name not in self._user.split(','):
                 return
@@ -242,7 +249,12 @@ class BangumiSync(_PluginBase):
             # 解析事件元数据
             meta = self.parse_event_meta(event_info)
             # 获取媒体信息
-            mediainfo = self.chain.recognize_media(meta)
+            if settings.VERSION_FLAG == "v3":
+                mediainfo = self.chain.recognize_media(
+                    meta=meta, media_source="themoviedb", media_id=meta.media_id
+                )
+            else:
+                mediainfo = self.chain.recognize_media(meta)
             if not mediainfo:
                 logger.debug(f"未识别到媒体信息: {event_info.item_name}, 不处理")
                 return
@@ -558,16 +570,27 @@ class BangumiSync(_PluginBase):
 
         def from_mediaserver_api(server_name, itemid):
             iteminfo = MediaServerChain().iteminfo(server_name, itemid)
-            if iteminfo and iteminfo.tmdbid:
-                logger.info(f"通过 {iteminfo.server} API 获取到 TMDB ID：{iteminfo.tmdbid}")
-                return iteminfo.tmdbid
+            tmdb_id = self._get_tmdb_id(iteminfo)
+            if tmdb_id:
+                logger.info(f"通过媒体服务器 API 获取到 TMDB ID：{tmdb_id}")
+                return tmdb_id
             return None
 
         def from_local_db(itemid):
-            item = MediaServerItem.get_by_itemid(db=None, item_id=itemid)
-            if item and item.tmdbid:
-                logger.info(f"通过本地数据库获取到 TMDB ID：{item.tmdbid}")
-                return item.tmdbid
+            if settings.VERSION_FLAG == "v3":
+                from app.db.session import SessionFactory
+
+                with SessionFactory() as db:
+                    item = MediaServerItem.get_by_server_itemid(
+                        db=db, server=event_info.server_name, item_id=itemid
+                    )
+                    tmdb_id = self._get_tmdb_id(item)
+            else:
+                item = MediaServerItem.get_by_itemid(db=None, item_id=itemid)
+                tmdb_id = self._get_tmdb_id(item)
+            if tmdb_id:
+                logger.info(f"通过本地数据库获取到 TMDB ID：{tmdb_id}")
+                return tmdb_id
             return None
 
         tmdb_id = None
@@ -587,8 +610,23 @@ class BangumiSync(_PluginBase):
             if tmdb_id:
                 break
 
-        meta.tmdbid = tmdb_id
+        if settings.VERSION_FLAG == "v3":
+            meta.media_source = "themoviedb" if tmdb_id else None
+            meta.media_id = str(tmdb_id) if tmdb_id else None
+        else:
+            meta.tmdbid = tmdb_id
         return meta
+
+    @staticmethod
+    def _get_tmdb_id(item) -> Optional[str]:
+        if item is None:
+            return None
+        if settings.VERSION_FLAG == "v3":
+            # 其他来源的原生 ID 不能当作 TMDB ID 使用。
+            if item.media_source == "themoviedb":
+                return item.media_id
+            return None
+        return item.tmdbid
 
     def __lookup_episode(self, episodes: Optional[dict], ep_num: int, unique_id) -> tuple[Optional[str], Any]:
         """
@@ -647,7 +685,12 @@ class BangumiSync(_PluginBase):
 
             group_id = None
 
-            subs = SubscribeOper().list_by_tmdbid(tmdbid, season)
+            if settings.VERSION_FLAG == "v3":
+                subs = [sub for sub in SubscribeOper().list_by_media_identity(
+                    media_source="themoviedb", media_id=str(tmdbid)
+                ) if sub.season == season]
+            else:
+                subs = SubscribeOper().list_by_tmdbid(tmdbid, season)
             for sub in subs:
                 if sub.episode_group:
                     group_id = sub.episode_group
