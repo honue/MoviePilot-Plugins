@@ -73,7 +73,17 @@ class BangumiAPIClient:
 
     @cached(maxsize=1024, ttl=60 * 60 * 6)
     def __cached_invoke(self, method, *args, **kwargs):
-        return self.req_method[method](*args, **kwargs)
+        resp = self.req_method[method](*args, **kwargs)
+        # 缓存装饰器跳过 None 和异常；在返回前验证响应，避免失败结果缓存六小时。
+        if resp is not None:
+            if not 200 <= resp.status_code < 300:
+                raise ImmediateException(f"Bangumi 请求失败，HTTP {resp.status_code}")
+            if resp.status_code not in (202, 204):
+                try:
+                    resp.json()
+                except ValueError:
+                    raise ImmediateException("Bangumi 返回无效 JSON") from None
+        return resp
 
     @retry(ExceptionToCheck=ConnectionError, logger=logger)
     def __invoke(self, method, url, key: str=None, call_cached=True, data=None, json: dict=None, **kwargs):
@@ -192,7 +202,7 @@ class BangumiSync(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/bangumi.jpg"
     # 插件版本
-    plugin_version = "2.0.4"
+    plugin_version = "2.0.5"
     # 插件作者
     plugin_author = "honue,happyTonakai"
     # 作者主页
