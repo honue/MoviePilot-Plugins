@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, List
 
 from app.chain.media import MediaChain
+from app.core.config import settings
 from app.core.event import eventmanager, Event
 from app.core.metainfo import MetaInfo
 from app.plugins import _PluginBase
@@ -23,7 +24,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.9.6"
+    plugin_version = "1.9.7"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -127,7 +128,6 @@ class DouBanWatching(_PluginBase):
 
         if not mediainfo:
             logger.warn(f'标题：{title}，tmdbid：{tmdb_id}，指定tmdbid未识别到媒体信息，尝试仅使用标题识别')
-            meta.tmdbid = None
             mediainfo = self._recognize_media(meta, None)
             if not mediainfo:
                 logger.error(f'仍然未识别到媒体信息，请检查TMDB网络连接...')
@@ -163,7 +163,6 @@ class DouBanWatching(_PluginBase):
 
         if not mediainfo:
             logger.warn(f'标题：{title}，tmdbid：{event_info.tmdb_id}，指定tmdbid未识别到媒体信息，尝试仅使用标题识别')
-            meta.tmdbid = None
             mediainfo = self._recognize_media(meta, None)
             if not mediainfo:
                 logger.error(f'仍然未识别到媒体信息，请检查TMDB网络连接...')
@@ -176,7 +175,17 @@ class DouBanWatching(_PluginBase):
         self._sync_to_douban(title, "collect", event_info.item_type, processed_items, mediainfo.poster_path)
 
     def _recognize_media(self, meta: MetaInfo, tmdb_id: Optional[int]) -> Optional[MediaInfo]:
-        return MediaChain().recognize_media(meta=meta, mtype=meta.type, tmdbid=tmdb_id, cache=True)
+        recognize = MediaChain().recognize_media
+        # 使用宿主版本标识选择 V2/V3 媒体识别接口。
+        if not tmdb_id:
+            # 识别过程可能回填媒体身份，按标题重试前需同时清除来源和 ID。
+            for attr in ("tmdbid", "media_source", "media_id"):
+                if hasattr(meta, attr):
+                    setattr(meta, attr, None)
+        if settings.VERSION_FLAG == "v3":
+            identity = {"media_source": "themoviedb", "media_id": str(tmdb_id)} if tmdb_id else {}
+            return recognize(meta=meta, mtype=meta.type, cache=True, **identity)
+        return recognize(meta=meta, mtype=meta.type, tmdbid=tmdb_id, cache=True)
 
     def _sync_to_douban(self, title: str, status: str, mediaType: str, processed_items: Dict,
                         poster_path: str) -> bool:
