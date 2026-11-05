@@ -24,7 +24,7 @@ class DouBanWatching(_PluginBase):
     # 插件图标
     plugin_icon = "douban.png"
     # 插件版本
-    plugin_version = "1.9.7"
+    plugin_version = "1.9.8"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -147,7 +147,8 @@ class DouBanWatching(_PluginBase):
         if sync_ret:
             logger.info(f"尝试同步之前同步失败的条目")
             self._wait_process: Dict = self.get_data('wait') or {}
-            for key, value in self._wait_process.items():
+            # 同步成功会删除待处理条目，遍历快照避免字典大小变化导致中断。
+            for key, value in list(self._wait_process.items()):
                 logger.info(f"尝试同步: {key}")
                 self._sync_to_douban(key, value["status"], value["type"], processed_items, value["poster_path"])
 
