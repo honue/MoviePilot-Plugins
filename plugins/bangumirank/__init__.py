@@ -29,7 +29,7 @@ class BangumiRank(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/honue/MoviePilot-Plugins/main/icons/miku.jpg"
     # 插件版本
-    plugin_version = "1.6"
+    plugin_version = "1.7"
     # 插件作者
     plugin_author = "honue"
     # 作者主页
@@ -587,21 +587,42 @@ class BangumiRank(_PluginBase):
                         logger.info(f'{mediainfo.title_year} 订阅已存在')
                         continue
                     # 添加订阅
-                    sid, msg = self.subscribechain.add(title=mediainfo.title,
-                                                       year=mediainfo.year,
-                                                       mtype=mediainfo.type,
-                                                       tmdbid=mediainfo.tmdb_id,
-                                                       season=meta.begin_season,
-                                                       exist_ok=True,
-                                                       username="Bangumi榜单")
-                    db = get_db()
-                    subscribe: Subscribe = Subscribe.get(db, sid)
-                    if not subscribe:
-                        logger.error("订阅不存在，设置过滤关键词失败")
-                        return
-                    subscribe.include = self._include
-                    subscribe.exclude = self._exclude
-                    subscribe.update(db=db, payload=subscribe.to_dict())
+                    if settings.VERSION_FLAG == "v3":
+                        # V3：媒体身份改用 media_source/media_id，订阅字段有白名单校验，
+                        # 过滤关键词直接随订阅一起写入
+                        sid, msg = self.subscribechain.add(title=mediainfo.title,
+                                                           year=mediainfo.year,
+                                                           mtype=mediainfo.type,
+                                                           media_source="themoviedb",
+                                                           media_id=str(mediainfo.tmdb_id),
+                                                           season=meta.begin_season,
+                                                           exist_ok=True,
+                                                           username="Bangumi榜单",
+                                                           include=self._include,
+                                                           exclude=self._exclude)
+                        if not sid:
+                            logger.error(f"{mediainfo.title_year} 添加订阅失败：{msg}")
+                            continue
+                    else:
+                        # V2：保持原有逻辑
+                        sid, msg = self.subscribechain.add(title=mediainfo.title,
+                                                           year=mediainfo.year,
+                                                           mtype=mediainfo.type,
+                                                           tmdbid=mediainfo.tmdb_id,
+                                                           season=meta.begin_season,
+                                                           exist_ok=True,
+                                                           username="Bangumi榜单")
+                        if not sid:
+                            logger.error(f"{mediainfo.title_year} 添加订阅失败：{msg}")
+                            continue
+                        db = get_db()
+                        subscribe: Subscribe = Subscribe.get(db, sid)
+                        if not subscribe:
+                            logger.error("订阅不存在，设置过滤关键词失败")
+                            return
+                        subscribe.include = self._include
+                        subscribe.exclude = self._exclude
+                        subscribe.update(db=db, payload=subscribe.to_dict())
 
                     # 存储历史记录
                     history.append({
